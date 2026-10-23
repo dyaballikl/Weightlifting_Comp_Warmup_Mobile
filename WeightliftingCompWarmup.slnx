@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WeightliftingCompWarmup.Core/WeightliftingCompWarmup.Core.csproj" />
+    <Project Path="src/WeightliftingCompWarmup.Maui/WeightliftingCompWarmup.Maui.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WeightliftingCompWarmup.Tests/WeightliftingCompWarmup.Tests.csproj" />
+  </Folder>
+</Solution>

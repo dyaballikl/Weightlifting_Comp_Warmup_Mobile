@@ -1,0 +1,66 @@
+name: Package Android APK & iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  package-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install MAUI Android Workload
+        run: dotnet workload install maui-android
+
+      - name: Publish Signed Android APK
+        run: dotnet publish src/WeightliftingCompWarmup.Maui/WeightliftingCompWarmup.Maui.csproj -f net10.0-android -c Release -p:AndroidPackageFormat=apk
+
+      - name: Upload Android APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WeightliftingCompWarmup-Android-APK
+          path: src/WeightliftingCompWarmup.Maui/bin/Release/net10.0-android/publish/*-Signed.apk
+
+  package-ios:
+    name: Build iOS IPA (macOS + Xcode)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install MAUI iOS Workload
+        run: dotnet workload install maui-ios
+
+      - name: Build iOS App Bundle (ios-arm64)
+        run: |
+          dotnet publish src/WeightliftingCompWarmup.Maui/WeightliftingCompWarmup.Maui.csproj \
+            -f net10.0-ios \
+            -c Release \
+            -r ios-arm64 \
+            -p:CreatePackage=false \
+            -p:EnableCodeSigning=false
+
+      - name: Package .app into Sideloadable .ipa
+        run: |
+          APP_PATH=$(find src/WeightliftingCompWarmup.Maui/bin/Release/net10.0-ios/ios-arm64 -name "*.app" -type d | head -n 1)
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -r WeightliftingCompWarmup-2.0.0-unsigned.ipa Payload
+
+      - name: Upload iOS IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WeightliftingCompWarmup-iOS-IPA
+          path: WeightliftingCompWarmup-2.0.0-unsigned.ipa
