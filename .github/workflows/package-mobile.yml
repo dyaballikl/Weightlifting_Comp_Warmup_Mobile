@@ -45,7 +45,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Install MAUI iOS Workload
-        run: dotnet workload install maui-ios
+        run: dotnet workload install maui-ios --version 10.0.400.1
 
       - name: Build iOS App Bundle (ios-arm64)
         run: |
