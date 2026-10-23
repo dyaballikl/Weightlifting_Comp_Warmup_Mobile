@@ -96,9 +96,9 @@ public static class BarbellLoadCalculator
                 IsCollar: true,
                 ColorType: PlateColorType.CollarSilver,
                 HexColor: "#B8C0CC",
-                BorderHexColor: "#475569",
+                BorderHexColor: "#334155",
                 TextHexColor: "#0F172A",
-                WidthUnits: 8,
+                WidthUnits: 14,
                 HeightRatio: 0.30,
                 Label: "C"));
         }

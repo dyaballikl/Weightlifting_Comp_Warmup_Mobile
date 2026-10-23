@@ -141,7 +141,8 @@ public class BarbellDrawable : IDrawable
         float maxPlateHeight = Math.Max(24f, rect.Height - 10f);
         float shaftHeight = Math.Max(5f, maxPlateHeight * 0.085f);
         float sleeveHeight = Math.Max(8f, maxPlateHeight * 0.145f);
-        float flangeHeight = Math.Max(14f, maxPlateHeight * 0.28f);
+        float oldFlangeHeight = Math.Max(14f, maxPlateHeight * 0.28f);
+        float flangeHeight = sleeveHeight + (oldFlangeHeight - sleeveHeight) * 0.5f;
 
         // Take up the whole width (with standard 8px margin per side) up until the point
         // where total width matches actual IWF barbell proportions (2200mm bar : 450mm plate = 4.89 : 1)
@@ -154,11 +155,10 @@ public class BarbellDrawable : IDrawable
         float sleeveLength = totalBarWidth * (415f / 2200f);
         float centerShaftWidth = Math.Max(40f, totalBarWidth - 2f * (flangeWidth + sleeveLength));
 
-        float gap = 1.2f;
         int totalUnits = loadout.SleeveElements.Sum(e => e.WidthUnits);
         float idealUnitScale = sleeveLength * 0.0115f;
         float maxFitUnitScale = totalUnits > 0
-            ? Math.Max(0.35f, (sleeveLength - 4.5f - loadout.SleeveElements.Count * gap) / totalUnits)
+            ? Math.Max(0.35f, (sleeveLength - 4.5f) / totalUnits)
             : idealUnitScale;
         float unitScale = Math.Min(idealUnitScale, maxFitUnitScale);
 
@@ -192,25 +192,26 @@ public class BarbellDrawable : IDrawable
         canvas.FillRoundedRectangle(rightFlangeX, centerY - flangeHeight / 2f, flangeWidth, flangeHeight, 1.5f);
         canvas.DrawRoundedRectangle(rightFlangeX, centerY - flangeHeight / 2f, flangeWidth, flangeHeight, 1.5f);
 
-        // 2. Draw right sleeve plates (inner to outer -> left to right)
-        float cursorRight = rightSleeveStart + gap;
+        // 2. Draw right sleeve plates flush against the flange and each other (inner to outer -> left to right)
+        float cursorRight = rightSleeveStart;
         foreach (var item in loadout.SleeveElements)
         {
-            float w = Math.Max(3.2f, item.WidthUnits * unitScale);
+            float minW = item.IsCollar ? 5.5f : 3.2f;
+            float w = Math.Max(minW, item.WidthUnits * unitScale);
             float h = Math.Max(sleeveHeight + 4f, (float)(maxPlateHeight * item.HeightRatio));
             DrawPlateElement(canvas, cursorRight, centerY - h / 2f, w, h, item);
-            cursorRight += w + gap;
+            cursorRight += w;
         }
 
-        // 3. Draw left sleeve plates (mirrored: inner to outer -> right to left)
-        float cursorLeft = leftFlangeX - gap;
+        // 3. Draw left sleeve plates flush against the flange and each other (mirrored: inner to outer -> right to left)
+        float cursorLeft = leftFlangeX;
         foreach (var item in loadout.SleeveElements)
         {
-            float w = Math.Max(3.2f, item.WidthUnits * unitScale);
+            float minW = item.IsCollar ? 5.5f : 3.2f;
+            float w = Math.Max(minW, item.WidthUnits * unitScale);
             float h = Math.Max(sleeveHeight + 4f, (float)(maxPlateHeight * item.HeightRatio));
             cursorLeft -= w;
             DrawPlateElement(canvas, cursorLeft, centerY - h / 2f, w, h, item);
-            cursorLeft -= gap;
         }
     }
 
@@ -221,8 +222,9 @@ public class BarbellDrawable : IDrawable
         float shaftStubWidth = 8f;
         float shaftHeight = Math.Max(4f, maxPlateHeight * 0.11f);
         float flangeWidth = 3.5f;
-        float flangeHeight = Math.Max(12f, maxPlateHeight * 0.30f);
         float sleeveHeight = Math.Max(6f, maxPlateHeight * 0.16f);
+        float oldFlangeHeight = Math.Max(12f, maxPlateHeight * 0.30f);
+        float flangeHeight = sleeveHeight + (oldFlangeHeight - sleeveHeight) * 0.5f;
 
         float startX = rect.Left + 4f;
         float sleeveStartX = startX + shaftStubWidth + flangeWidth;
@@ -234,14 +236,15 @@ public class BarbellDrawable : IDrawable
         int totalUnits = loadout.SleeveElements.Sum(e => e.WidthUnits);
         float availableForPlates = maxSleeveWidth - 5f;
         float unitScale = totalUnits > 0
-            ? Math.Min(0.60f, Math.Max(0.36f, (availableForPlates - loadout.SleeveElements.Count * 1.1f) / totalUnits))
+            ? Math.Min(0.60f, Math.Max(0.36f, availableForPlates / totalUnits))
             : 0.55f;
 
-        float platesTotalWidth = 1.2f;
+        float platesTotalWidth = 0f;
         foreach (var item in loadout.SleeveElements)
         {
-            float w = Math.Max(3.0f, item.WidthUnits * unitScale);
-            platesTotalWidth += w + 1.1f;
+            float minW = item.IsCollar ? 5.0f : 3.0f;
+            float w = Math.Max(minW, item.WidthUnits * unitScale);
+            platesTotalWidth += w;
         }
 
         float sleeveWidth = Math.Min(maxSleeveWidth, Math.Max(proportionalSleeveWidth, platesTotalWidth + 4.5f));
@@ -263,13 +266,14 @@ public class BarbellDrawable : IDrawable
         canvas.FillRoundedRectangle(sleeveStartX, centerY - sleeveHeight / 2f, sleeveWidth, sleeveHeight, 2f);
         canvas.DrawRoundedRectangle(sleeveStartX, centerY - sleeveHeight / 2f, sleeveWidth, sleeveHeight, 2f);
 
-        float cursorX = sleeveStartX + 1.2f;
+        float cursorX = sleeveStartX;
         foreach (var item in loadout.SleeveElements)
         {
-            float w = Math.Max(3.0f, item.WidthUnits * unitScale);
+            float minW = item.IsCollar ? 5.0f : 3.0f;
+            float w = Math.Max(minW, item.WidthUnits * unitScale);
             float h = Math.Max(sleeveHeight + 3f, (float)(maxPlateHeight * item.HeightRatio));
             DrawPlateElement(canvas, cursorX, centerY - h / 2f, w, h, item);
-            cursorX += w + 1.1f;
+            cursorX += w;
         }
     }
 
@@ -290,11 +294,20 @@ public class BarbellDrawable : IDrawable
         canvas.FillRoundedRectangle(x, y, width, height, cornerRadius);
         canvas.DrawRoundedRectangle(x, y, width, height, cornerRadius);
 
-        if (item.IsCollar && height >= 10f)
+        if (item.IsCollar)
         {
-            // Draw collar locking lever detail
-            canvas.StrokeColor = Color.FromArgb("#334155");
-            canvas.DrawLine(x + width / 2f, y + 2f, x + width / 2f, y + height - 2f);
+            // Draw competition collar adjustment handle sticking out the top like a real comp collar
+            float handleWidth = Math.Clamp(width * 0.34f, 2.5f, 4.5f);
+            float handleStickOut = Math.Max(4.5f, height * 0.38f);
+            float handleInnerOverlap = Math.Max(3.0f, height * 0.32f);
+            float handleX = x + (width - handleWidth) / 2f;
+            float handleY = y - handleStickOut;
+            float handleHeight = handleStickOut + handleInnerOverlap;
+
+            canvas.FillColor = Color.FromArgb(item.HexColor);
+            canvas.StrokeColor = Color.FromArgb(item.BorderHexColor);
+            canvas.FillRoundedRectangle(handleX, handleY, handleWidth, handleHeight, 1f);
+            canvas.DrawRoundedRectangle(handleX, handleY, handleWidth, handleHeight, 1f);
         }
     }
 }
