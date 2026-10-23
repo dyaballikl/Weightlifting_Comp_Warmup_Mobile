@@ -24,7 +24,6 @@ jobs:
         run: |
           dotnet publish src/WeightliftingCompWarmup.Maui/WeightliftingCompWarmup.Maui.csproj \
             -f net10.0-android \
-            -p:TargetFrameworks=net10.0-android \
             -c Release \
             -p:AndroidPackageFormat=apk
 
@@ -52,7 +51,6 @@ jobs:
         run: |
           dotnet publish src/WeightliftingCompWarmup.Maui/WeightliftingCompWarmup.Maui.csproj \
             -f net10.0-ios \
-            -p:TargetFrameworks=net10.0-ios \
             -c Release \
             -r ios-arm64 \
             -p:BuildIpa=false \
