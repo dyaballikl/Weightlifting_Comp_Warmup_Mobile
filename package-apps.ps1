@@ -2,6 +2,7 @@ param(
     [string]$MacBuildHost = "",
     [string]$MacUser = "",
     [switch]$AndroidOnly,
+    [switch]$PlayStoreBundleOnly,
     [switch]$NoVersionBump
 )
 
@@ -10,9 +11,11 @@ $ProjectRoot = $PSScriptRoot
 $MauiProject = Join-Path $ProjectRoot "src\WeightliftingCompWarmup.Maui\WeightliftingCompWarmup.Maui.csproj"
 $PackagesDir = Join-Path $ProjectRoot "packages"
 $AndroidOutDir = Join-Path $PackagesDir "android"
+$PlayStoreOutDir = Join-Path $PackagesDir "playstore"
 $IosOutDir = Join-Path $PackagesDir "ios"
 
 New-Item -ItemType Directory -Force -Path $AndroidOutDir | Out-Null
+New-Item -ItemType Directory -Force -Path $PlayStoreOutDir | Out-Null
 New-Item -ItemType Directory -Force -Path $IosOutDir | Out-Null
 
 # Read and optionally auto-increment version in WeightliftingCompWarmup.Maui.csproj
@@ -52,17 +55,49 @@ if (-not $NoVersionBump) {
     Write-Host "=== Using Current Version: $DisplayVersion (build $VersionCode) ===" -ForegroundColor Magenta
 }
 
-Write-Host "=== 1. Packaging Android Release APK (v$DisplayVersion) ===" -ForegroundColor Cyan
-dotnet publish $MauiProject -f net10.0-android -c Release -p:AndroidPackageFormat=apk
+if (-not $PlayStoreBundleOnly) {
+    Write-Host "=== 1. Packaging Android Release APK (v$DisplayVersion) ===" -ForegroundColor Cyan
+    dotnet publish $MauiProject -f net10.0-android -c Release -p:AndroidPackageFormat=apk
 
-$SignedApk = Join-Path $ProjectRoot "src\WeightliftingCompWarmup.Maui\bin\Release\net10.0-android\publish\com.weightlifting.compwarmup-Signed.apk"
-if (Test-Path $SignedApk) {
-    $DestApk = Join-Path $AndroidOutDir "WeightliftingCompWarmup-$DisplayVersion-Signed.apk"
-    Copy-Item $SignedApk $DestApk -Force
-    Write-Host "Android APK ready: $DestApk" -ForegroundColor Green
+    $SignedApk = Join-Path $ProjectRoot "src\WeightliftingCompWarmup.Maui\bin\Release\net10.0-android\publish\com.weightlifting.compwarmup-Signed.apk"
+    if (Test-Path $SignedApk) {
+        $DestApk = Join-Path $AndroidOutDir "WeightliftingCompWarmup-$DisplayVersion-Signed.apk"
+        Copy-Item $SignedApk $DestApk -Force
+        Write-Host "Android APK ready: $DestApk" -ForegroundColor Green
+    }
 }
 
-if (-not $AndroidOnly) {
+$KeystorePath = Join-Path $PlayStoreOutDir "comp-owl-upload.keystore"
+$CredsPath = Join-Path $PlayStoreOutDir "KEYSTORE_CREDENTIALS.txt"
+if (Test-Path $KeystorePath) {
+    Write-Host ""
+    Write-Host "=== Packaging Google Play Store Release AAB (v$DisplayVersion, build $VersionCode) ===" -ForegroundColor Cyan
+    $CredsRaw = Get-Content -Path $CredsPath -Raw
+    $AliasMatch = [regex]::Match($CredsRaw, 'Key Alias\s*:\s*(\S+)')
+    $PassMatch = [regex]::Match($CredsRaw, 'Store Password\s*:\s*(\S+)')
+    if (-not $AliasMatch.Success -or -not $PassMatch.Success) {
+        throw "Could not parse Key Alias or Store Password from $CredsPath"
+    }
+    $KeyAlias = $AliasMatch.Groups[1].Value.Trim()
+    $KeyPass = $PassMatch.Groups[1].Value.Trim()
+
+    dotnet publish $MauiProject -f net10.0-android -c Release `
+        -p:AndroidPackageFormat=aab `
+        -p:AndroidKeyStore=true `
+        -p:AndroidSigningKeyStore="$KeystorePath" `
+        -p:AndroidSigningKeyAlias="$KeyAlias" `
+        -p:AndroidSigningKeyPass="$KeyPass" `
+        -p:AndroidSigningStorePass="$KeyPass"
+
+    $SignedAab = Join-Path $ProjectRoot "src\WeightliftingCompWarmup.Maui\bin\Release\net10.0-android\publish\com.weightlifting.compwarmup-Signed.aab"
+    if (Test-Path $SignedAab) {
+        $DestAab = Join-Path $PlayStoreOutDir "WeightliftingCompWarmup-$DisplayVersion-Signed.aab"
+        Copy-Item $SignedAab $DestAab -Force
+        Write-Host "Play Store AAB ready: $DestAab" -ForegroundColor Green
+    }
+}
+
+if (-not $AndroidOnly -and -not $PlayStoreBundleOnly) {
     Write-Host ""
     Write-Host "=== 2. Packaging iOS Release IPA (v$DisplayVersion) ===" -ForegroundColor Cyan
     if ($IsMacOS) {
