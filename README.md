@@ -47,7 +47,8 @@ powershell -ExecutionPolicy Bypass -File .\package-apps.ps1 -AndroidOnly
 
 ---
 
-## License
+## License & Privacy
 
-Licensed under the **GNU General Public License v3.0** — see [LICENSE](./LICENSE) for details.
-Contact `dyaballikl@gmail.com` for permissions.
+- **License:** Licensed under the **GNU General Public License v3.0** — see [LICENSE](./LICENSE) for details.
+- **Privacy Policy:** Comp OWL runs 100% offline and collects zero personal data — see [PRIVACY.md](./PRIVACY.md) for the full store-compliant privacy policy.
+- **Contact:** `dyaballikl@gmail.com` or [@lifting_while_diabetic](https://www.instagram.com/lifting_while_diabetic/) on Instagram.
