@@ -42,7 +42,7 @@ public class MainPage : ContentPage
         _vm = viewModel;
         BindingContext = _vm;
 
-        Title = "CompOWL";
+        Title = "Comp OWL";
         BackgroundColor = Color.FromArgb("#0B1120");
         NavigationPage.SetHasNavigationBar(this, false);
 

@@ -18,7 +18,7 @@ public class App : Application
     {
         return new Window(new NavigationPage(_mainPage))
         {
-            Title = "CompOWL — Weightlifting Comp Warmup"
+            Title = "Comp OWL — Weightlifting Comp Warmup"
         };
     }
 }

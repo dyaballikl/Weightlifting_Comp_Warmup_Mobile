@@ -90,21 +90,35 @@ public class WarmupEngineTests
     }
 
     [Fact]
-    public void BarbellLoadCalculator_UsesFullHeightWhiteBumperWhen5KgOr2Point5KgIsHeaviest()
+    public void BarbellLoadCalculator_UsesFullSizePlasticWhite5KgAndRed2Point5KgPlatesWhenBelowGreen10KgMinimum()
     {
-        // 30kg warmup lift on 20kg bar -> 5kg per side (heaviest plate is 5kg -> full height 1.0 white training bumper)
+        // 30kg warmup lift on 20kg bar -> 5kg per side (below 10kg green minimum -> full size white 5kg plastic plate)
         var load30 = BarbellLoadCalculator.Calculate(liftWeightKg: 30, barWeightKg: 20, isOpener: false);
         Assert.Single(load30.SleeveElements);
         Assert.Equal(5.0m, load30.SleeveElements[0].WeightKg);
+        Assert.Equal(13, load30.SleeveElements[0].WidthUnits);
         Assert.Equal(1.00, load30.SleeveElements[0].HeightRatio);
         Assert.Equal(PlateColorType.White, load30.SleeveElements[0].ColorType);
 
-        // 25kg warmup lift on 20kg bar -> 2.5kg per side (heaviest plate is 2.5kg -> full height 1.0 white technique bumper)
+        // 25kg warmup lift on 20kg bar -> 2.5kg per side (below 10kg green minimum -> full size red 2.5kg plastic plate)
         var load25 = BarbellLoadCalculator.Calculate(liftWeightKg: 25, barWeightKg: 20, isOpener: false);
         Assert.Single(load25.SleeveElements);
         Assert.Equal(2.5m, load25.SleeveElements[0].WeightKg);
+        Assert.Equal(13, load25.SleeveElements[0].WidthUnits);
         Assert.Equal(1.00, load25.SleeveElements[0].HeightRatio);
-        Assert.Equal(PlateColorType.White, load25.SleeveElements[0].ColorType);
+        Assert.Equal(PlateColorType.Red, load25.SleeveElements[0].ColorType);
+
+        // 35kg warmup lift on 20kg bar -> 5kg + 2.5kg per side (still below 10kg green minimum -> BOTH are full size 25kg-sized plastic plates!)
+        var load35 = BarbellLoadCalculator.Calculate(liftWeightKg: 35, barWeightKg: 20, isOpener: false);
+        Assert.Equal(2, load35.SleeveElements.Count);
+        Assert.Equal(5.0m, load35.SleeveElements[0].WeightKg);
+        Assert.Equal(13, load35.SleeveElements[0].WidthUnits);
+        Assert.Equal(1.00, load35.SleeveElements[0].HeightRatio);
+        Assert.Equal(PlateColorType.White, load35.SleeveElements[0].ColorType);
+        Assert.Equal(2.5m, load35.SleeveElements[1].WeightKg);
+        Assert.Equal(13, load35.SleeveElements[1].WidthUnits);
+        Assert.Equal(1.00, load35.SleeveElements[1].HeightRatio);
+        Assert.Equal(PlateColorType.Red, load35.SleeveElements[1].ColorType);
     }
 
     [Fact]

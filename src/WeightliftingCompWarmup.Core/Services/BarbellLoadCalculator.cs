@@ -122,34 +122,37 @@ public static class BarbellLoadCalculator
 
     private static LoadedSleeveElement CreatePlateElement(decimal plateWeight, decimal maxPlateOnBar)
     {
-        // Special case from WinForms WeightBox: if 5.0kg is the heaviest plate on the bar, draw full-height white training bumper
-        if (plateWeight == 5.0m && maxPlateOnBar == 5.0m)
+        // When the barbell is lighter than the green 10kg plate minimum (maxPlateOnBar < 10.0m),
+        // use full-size (50cm / 25kg-plate-sized) plastic white 5kg and red 2.5kg technique plates.
+        if (maxPlateOnBar < 10.0m)
         {
-            return new LoadedSleeveElement(
-                WeightKg: 5.0m,
-                IsCollar: false,
-                ColorType: PlateColorType.White,
-                HexColor: "#F8FAFC",
-                BorderHexColor: "#334155",
-                TextHexColor: "#0F172A",
-                WidthUnits: 13,
-                HeightRatio: 1.00,
-                Label: "5");
-        }
+            if (plateWeight == 5.0m)
+            {
+                return new LoadedSleeveElement(
+                    WeightKg: 5.0m,
+                    IsCollar: false,
+                    ColorType: PlateColorType.White,
+                    HexColor: "#F8FAFC",
+                    BorderHexColor: "#334155",
+                    TextHexColor: "#0F172A",
+                    WidthUnits: 13,
+                    HeightRatio: 1.00,
+                    Label: "5");
+            }
 
-        // Special case from WinForms WeightBox: if 2.5kg is the heaviest plate on the bar, draw full-height white technique bumper
-        if (plateWeight == 2.5m && maxPlateOnBar == 2.5m)
-        {
-            return new LoadedSleeveElement(
-                WeightKg: 2.5m,
-                IsCollar: false,
-                ColorType: PlateColorType.White,
-                HexColor: "#F8FAFC",
-                BorderHexColor: "#334155",
-                TextHexColor: "#0F172A",
-                WidthUnits: 11,
-                HeightRatio: 1.00,
-                Label: "2.5");
+            if (plateWeight == 2.5m)
+            {
+                return new LoadedSleeveElement(
+                    WeightKg: 2.5m,
+                    IsCollar: false,
+                    ColorType: PlateColorType.Red,
+                    HexColor: "#DC2626",
+                    BorderHexColor: "#7F1D1D",
+                    TextHexColor: "#FFFFFF",
+                    WidthUnits: 13,
+                    HeightRatio: 1.00,
+                    Label: "2.5");
+            }
         }
 
         return plateWeight switch

@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDisplayName</key>
-    <string>CompOWL</string>
+    <string>Comp OWL</string>
     <key>CFBundleName</key>
-    <string>CompOWL</string>
+    <string>Comp OWL</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <!-- 1 = iPhone/iPod touch, 2 = iPad -->
