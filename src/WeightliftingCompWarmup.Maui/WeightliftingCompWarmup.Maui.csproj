@@ -17,8 +17,8 @@
     <!-- Display name & identifiers -->
     <ApplicationTitle>Comp OWL</ApplicationTitle>
     <ApplicationId>com.weightlifting.compwarmup</ApplicationId>
-    <ApplicationDisplayVersion>2.0.8</ApplicationDisplayVersion>
-    <ApplicationVersion>10</ApplicationVersion>
+    <ApplicationDisplayVersion>2.0.9</ApplicationDisplayVersion>
+    <ApplicationVersion>11</ApplicationVersion>
 
     <!-- Supported OS versions for Phone, Tablet & Desktop preview -->
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>

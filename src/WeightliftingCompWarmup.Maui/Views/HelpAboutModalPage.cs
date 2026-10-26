@@ -19,8 +19,8 @@ public class HelpAboutModalPage : ContentPage
 
     public const string AppShortName = "Comp OWL";
     public const string AppFullName = "Weightlifting Comp Warmup";
-    public const string AppVersion = "2.0.8";
-    public const string AppBuild = "10";
+    public const string AppVersion = "2.0.9";
+    public const string AppBuild = "11";
 
     public HelpAboutModalPage(bool startOnAboutTab = false)
     {
@@ -398,7 +398,7 @@ public class HelpAboutModalPage : ContentPage
                 {
                     new Span
                     {
-                        Text = "Created by Matt Cunningham (",
+                        Text = "Created by Matt Cunningham - ",
                         TextColor = Color.FromArgb("#F8FAFC"),
                         FontAttributes = FontAttributes.Bold,
                         FontSize = 13
@@ -409,13 +409,6 @@ public class HelpAboutModalPage : ContentPage
                         TextColor = Color.FromArgb("#38BDF8"),
                         FontAttributes = FontAttributes.Bold,
                         TextDecorations = TextDecorations.Underline,
-                        FontSize = 13
-                    },
-                    new Span
-                    {
-                        Text = " on instagram)",
-                        TextColor = Color.FromArgb("#F8FAFC"),
-                        FontAttributes = FontAttributes.Bold,
                         FontSize = 13
                     }
                 }
