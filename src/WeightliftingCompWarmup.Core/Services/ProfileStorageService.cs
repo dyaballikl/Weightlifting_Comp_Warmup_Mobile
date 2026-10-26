@@ -9,6 +9,7 @@ namespace WeightliftingCompWarmup.Core.Services;
 public class SavedAppState
 {
     public string LastUsedProfileName { get; set; } = "Demo Profile";
+    public bool HasSeenWelcomeHelp { get; set; }
     public List<Profile> Profiles { get; set; } = new();
 }
 
@@ -28,6 +29,7 @@ public class ProfileStorageService
 
     public List<Profile> Profiles { get; private set; } = new();
     public Profile ActiveProfile { get; private set; } = Defaults.CreateDemoProfile();
+    public bool HasSeenWelcomeHelp { get; private set; }
 
     public ProfileStorageService(string? storageFilePath = null)
     {
@@ -63,6 +65,7 @@ public class ProfileStorageService
                 if (state != null && state.Profiles.Count > 0)
                 {
                     Profiles = state.Profiles;
+                    HasSeenWelcomeHelp = state.HasSeenWelcomeHelp;
                     ActiveProfile = Profiles.FirstOrDefault(p =>
                         string.Equals(p.Name, state.LastUsedProfileName, StringComparison.OrdinalIgnoreCase))
                         ?? Profiles[0];
@@ -80,6 +83,18 @@ public class ProfileStorageService
     }
 
     /// <summary>
+    /// Marks the welcome help screen as seen and persists the flag to disk.
+    /// </summary>
+    public void MarkWelcomeHelpSeen()
+    {
+        if (!HasSeenWelcomeHelp)
+        {
+            HasSeenWelcomeHelp = true;
+            Save();
+        }
+    }
+
+    /// <summary>
     /// Saves all profiles and the currently active profile name to disk.
     /// </summary>
     public void Save()
@@ -88,6 +103,7 @@ public class ProfileStorageService
         var state = new SavedAppState
         {
             LastUsedProfileName = ActiveProfile.Name,
+            HasSeenWelcomeHelp = HasSeenWelcomeHelp,
             Profiles = Profiles
         };
 

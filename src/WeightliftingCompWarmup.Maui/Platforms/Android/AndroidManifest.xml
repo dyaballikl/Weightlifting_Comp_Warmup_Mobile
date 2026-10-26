@@ -3,7 +3,7 @@
           package="com.weightlifting.compwarmup">
   <application android:allowBackup="true"
                android:supportsRtl="true"
-               android:label="Weightlifting Comp Warmup"
+               android:label="CompOWL"
                android:icon="@mipmap/appicon"
                android:roundIcon="@mipmap/appicon_round">
   </application>

@@ -5,7 +5,7 @@ using Android.Content.PM;
 namespace WeightliftingCompWarmup.Maui;
 
 [Activity(
-    Label = "Weightlifting Comp Warmup",
+    Label = "CompOWL",
     Theme = "@style/Maui.SplashTheme",
     MainLauncher = true,
     LaunchMode = LaunchMode.SingleTop,

@@ -123,6 +123,9 @@ public class MainViewModel : INotifyPropertyChanged
     }
 
     public Profile ActiveProfile => _storageService.ActiveProfile;
+    public bool HasSeenWelcomeHelp => _storageService.HasSeenWelcomeHelp;
+
+    public void MarkWelcomeHelpSeen() => _storageService.MarkWelcomeHelpSeen();
 
     public string ActiveProfileName
     {

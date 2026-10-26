@@ -21,6 +21,7 @@ public class MainPage : ContentPage
     private IDispatcherTimer? _timer;
     private bool _isWideLayout;
     private bool _layoutInitialized;
+    private bool _firstOpenHelpChecked;
 
     private readonly Grid _rootGrid;
     private readonly ContentView _headerContainer;
@@ -41,7 +42,7 @@ public class MainPage : ContentPage
         _vm = viewModel;
         BindingContext = _vm;
 
-        Title = "Weightlifting Comp Warmup";
+        Title = "CompOWL";
         BackgroundColor = Color.FromArgb("#0B1120");
         NavigationPage.SetHasNavigationBar(this, false);
 
@@ -80,6 +81,22 @@ public class MainPage : ContentPage
             _timer.Interval = TimeSpan.FromSeconds(1);
             _timer.Tick += (_, _) => _vm.OnTimerTick();
             _timer.Start();
+        }
+
+        if (!_firstOpenHelpChecked)
+        {
+            _firstOpenHelpChecked = true;
+            if (!_vm.HasSeenWelcomeHelp)
+            {
+                _vm.MarkWelcomeHelpSeen();
+                Dispatcher.Dispatch(async () =>
+                {
+                    if (Navigation.ModalStack.Count == 0)
+                    {
+                        await Navigation.PushModalAsync(new HelpAboutModalPage(startOnAboutTab: false), animated: true);
+                    }
+                });
+            }
         }
     }
 
@@ -253,12 +270,13 @@ public class MainPage : ContentPage
         var headerCard = CreateCardBorder(padding: compact ? new Thickness(8, 6) : new Thickness(12, 10));
         var stack = new VerticalStackLayout { Spacing = compact ? 6 : 8 };
 
-        // Row 1: Active Profile Button + Global Settings (Bar Weight + Beep)
+        // Row 1: Active Profile Button + Global Settings (Bar Weight + Beep + Help/About)
         var topRow = new Grid
         {
             ColumnDefinitions =
             {
                 new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Auto },
                 new ColumnDefinition { Width = GridLength.Auto },
                 new ColumnDefinition { Width = GridLength.Auto }
             },
@@ -309,9 +327,25 @@ public class MainPage : ContentPage
         beepBtn.Clicked += (_, _) => _vm.BeepOnNextLift = !_vm.BeepOnNextLift;
         _beepHeaderBtn = beepBtn;
 
+        var helpBtn = new Button
+        {
+            Text = compact ? "❓" : "❓ Help",
+            BackgroundColor = Color.FromArgb("#0F172A"),
+            BorderColor = Color.FromArgb("#38BDF8"),
+            BorderWidth = 1,
+            TextColor = Color.FromArgb("#38BDF8"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = compact ? 11.5 : 12,
+            CornerRadius = 8,
+            Padding = compact ? new Thickness(8, 2) : new Thickness(10, 6),
+            HeightRequest = compact ? 34 : 40
+        };
+        helpBtn.Clicked += OnHelpAboutClicked;
+
         topRow.Add(profileBtn, 0, 0);
         topRow.Add(barBtn, 1, 0);
         topRow.Add(beepBtn, 2, 0);
+        topRow.Add(helpBtn, 3, 0);
 
         // Row 2: Discipline Selector (SNATCH vs CLEAN & JERK) + Mode Selector (SETUP vs LIVE)
         var navRow = new Grid
@@ -2522,6 +2556,15 @@ public class MainPage : ContentPage
             {
                 _vm.ResetAllSettingsToDemo();
             }
+        }
+    }
+
+    private async void OnHelpAboutClicked(object? sender, EventArgs e)
+    {
+        _vm.MarkWelcomeHelpSeen();
+        if (Navigation.ModalStack.Count == 0)
+        {
+            await Navigation.PushModalAsync(new HelpAboutModalPage(startOnAboutTab: false), animated: true);
         }
     }
 

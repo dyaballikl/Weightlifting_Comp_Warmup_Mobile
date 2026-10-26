@@ -13,8 +13,8 @@
   <mp:PhoneIdentity PhoneProductId="b1f82c10-4c9a-49f1-82b1-7a91e8371c22" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
-    <DisplayName>Weightlifting Comp Warmup</DisplayName>
-    <PublisherDisplayName>Weightlifting Comp Warmup</PublisherDisplayName>
+    <DisplayName>CompOWL</DisplayName>
+    <PublisherDisplayName>CompOWL</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
@@ -32,8 +32,8 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="Weightlifting Comp Warmup"
-        Description="Olympic Weightlifting Competition Warmup Calculator and Live Runner"
+        DisplayName="CompOWL"
+        Description="CompOWL — Olympic Weightlifting Competition Warmup Calculator and Live Runner"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
