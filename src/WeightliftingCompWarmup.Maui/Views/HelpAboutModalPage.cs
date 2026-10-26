@@ -19,8 +19,8 @@ public class HelpAboutModalPage : ContentPage
 
     public const string AppShortName = "Comp OWL";
     public const string AppFullName = "Weightlifting Comp Warmup";
-    public const string AppVersion = "2.0.11";
-    public const string AppBuild = "13";
+    public const string AppVersion = "2.0.12";
+    public const string AppBuild = "14";
 
     public HelpAboutModalPage(bool startOnAboutTab = false)
     {

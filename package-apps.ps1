@@ -55,6 +55,15 @@ if (-not $NoVersionBump) {
     Write-Host "=== Using Current Version: $DisplayVersion (build $VersionCode) ===" -ForegroundColor Magenta
 }
 
+# Clear cached MAUI Resizetizer and Android aapt2 flat resource archives so icon/splash changes always take effect
+$AndroidObjDir = Join-Path $ProjectRoot "src\WeightliftingCompWarmup.Maui\obj\Release\net10.0-android"
+foreach ($subDir in @("resizetizer", "flat", "flata", "res")) {
+    $targetDir = Join-Path $AndroidObjDir $subDir
+    if (Test-Path $targetDir) {
+        Remove-Item -Path $targetDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 if (-not $PlayStoreBundleOnly) {
     Write-Host "=== 1. Packaging Android Release APK (v$DisplayVersion) ===" -ForegroundColor Cyan
     dotnet publish $MauiProject -f net10.0-android -c Release -p:AndroidPackageFormat=apk
