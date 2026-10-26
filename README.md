@@ -25,6 +25,24 @@ Enter your lifter's **Snatch** or **Clean & Jerk** opener, barbell type, weight-
 
 ---
 
+## Screenshots
+
+### 📱 Phone Layout (Portrait)
+| Snatch Setup & Opener | Warmup Schedule & Plates | Snatch LIVE Countdown | Clean & Jerk 3-Phase LIVE |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/screenshots/01-phone-snatch-setup.png" alt="Snatch Setup & 110kg Opener" width="200" /> | <img src="docs/screenshots/02-phone-warmup-schedule.png" alt="Warmup Schedule & IWF Plate Sleeves" width="200" /> | <img src="docs/screenshots/04-phone-snatch-live.png" alt="Snatch LIVE Countdown" width="200" /> | <img src="docs/screenshots/05-phone-cj-live-3phase.png" alt="Clean & Jerk 3-Phase LIVE" width="200" /> |
+
+| Jumps, Times & Extras | About & Ko-fi Support |
+| :---: | :---: |
+| <img src="docs/screenshots/03-phone-rules-and-jumps.png" alt="Jumps, Times & Pre-Warmup Extras" width="200" /> | <img src="docs/screenshots/06-phone-about.png" alt="About Comp OWL" width="200" /> |
+
+### 💻 Tablet / iPad 2-Column Split Dashboard (Landscape)
+| Setup & Schedule Split Dashboard | Live Competition Split Dashboard |
+| :---: | :---: |
+| <img src="docs/screenshots/07-tablet-split-dashboard.png" alt="Tablet 2-Column Setup Dashboard" width="420" /> | <img src="docs/screenshots/08-tablet-live-dashboard.png" alt="Tablet 2-Column Live Dashboard" width="420" /> |
+
+---
+
 ## Key Features
 
 ### 🏋️ Reverse-Calculated Warmup Progression
