@@ -19,8 +19,8 @@ public class HelpAboutModalPage : ContentPage
 
     public const string AppShortName = "Comp OWL";
     public const string AppFullName = "Weightlifting Comp Warmup";
-    public const string AppVersion = "2.0.7";
-    public const string AppBuild = "9";
+    public const string AppVersion = "2.0.8";
+    public const string AppBuild = "10";
 
     public HelpAboutModalPage(bool startOnAboutTab = false)
     {
@@ -390,13 +390,51 @@ public class HelpAboutModalPage : ContentPage
             FontAttributes = FontAttributes.Bold,
             FontSize = 11
         });
-        licenseStack.Add(new Label
+        var creatorLabel = new Label
         {
-            Text = "Created by Matt Cunningham (@lifting_while_diabetic on instagram)",
-            TextColor = Color.FromArgb("#F8FAFC"),
-            FontAttributes = FontAttributes.Bold,
-            FontSize = 13
-        });
+            FormattedText = new FormattedString
+            {
+                Spans =
+                {
+                    new Span
+                    {
+                        Text = "Created by Matt Cunningham (",
+                        TextColor = Color.FromArgb("#F8FAFC"),
+                        FontAttributes = FontAttributes.Bold,
+                        FontSize = 13
+                    },
+                    new Span
+                    {
+                        Text = "@lifting_while_diabetic",
+                        TextColor = Color.FromArgb("#38BDF8"),
+                        FontAttributes = FontAttributes.Bold,
+                        TextDecorations = TextDecorations.Underline,
+                        FontSize = 13
+                    },
+                    new Span
+                    {
+                        Text = " on instagram)",
+                        TextColor = Color.FromArgb("#F8FAFC"),
+                        FontAttributes = FontAttributes.Bold,
+                        FontSize = 13
+                    }
+                }
+            }
+        };
+        var instagramTap = new TapGestureRecognizer();
+        instagramTap.Tapped += async (_, _) =>
+        {
+            try
+            {
+                await Launcher.Default.OpenAsync("https://www.instagram.com/lifting_while_diabetic/");
+            }
+            catch
+            {
+                // Ignore if browser launcher unavailable
+            }
+        };
+        creatorLabel.GestureRecognizers.Add(instagramTap);
+        licenseStack.Add(creatorLabel);
         licenseStack.Add(new Label
         {
             Text = "GNU General Public License v3.0 (GPL-3.0) • Based on the original Windows desktop Weightlifting_Comp_Warmup application. Free and open-source software distributed under the terms of the GPL-3.0 license.",
