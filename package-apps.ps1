@@ -49,6 +49,31 @@ if (-not $NoVersionBump) {
         "<ApplicationVersion>$VersionCode</ApplicationVersion>")
 
     Set-Content -Path $MauiProject -Value $CsprojContent -NoNewline -Encoding UTF8
+
+    # Keep HelpAboutModalPage.cs, README.md, and STORE_LISTING.md synchronized with the bumped version
+    $HelpAboutFile = Join-Path $ProjectRoot "src\WeightliftingCompWarmup.Maui\Views\HelpAboutModalPage.cs"
+    if (Test-Path $HelpAboutFile) {
+        $HelpContent = Get-Content -Path $HelpAboutFile -Raw
+        $HelpContent = [regex]::Replace($HelpContent, 'public const string AppVersion = "[^"]+";', "public const string AppVersion = `"$DisplayVersion`";")
+        $HelpContent = [regex]::Replace($HelpContent, 'public const string AppBuild = "[^"]+";', "public const string AppBuild = `"$VersionCode`";")
+        Set-Content -Path $HelpAboutFile -Value $HelpContent -NoNewline -Encoding UTF8
+    }
+
+    $ReadmeFile = Join-Path $ProjectRoot "README.md"
+    if (Test-Path $ReadmeFile) {
+        $ReadmeContent = Get-Content -Path $ReadmeFile -Raw
+        $ReadmeContent = [regex]::Replace($ReadmeContent, 'version-\d+\.\d+\.\d+%20\(build%20\d+\)', "version-$DisplayVersion%20(build%20$VersionCode)")
+        $ReadmeContent = [regex]::Replace($ReadmeContent, '\*\*Current Release:\*\* `v\d+\.\d+\.\d+` \(Build `\d+`\)', "**Current Release:** ``v$DisplayVersion`` (Build ``$VersionCode``)")
+        Set-Content -Path $ReadmeFile -Value $ReadmeContent -NoNewline -Encoding UTF8
+    }
+
+    $StoreListingFile = Join-Path $PlayStoreOutDir "STORE_LISTING.md"
+    if (Test-Path $StoreListingFile) {
+        $ListingContent = Get-Content -Path $StoreListingFile -Raw
+        $ListingContent = [regex]::Replace($ListingContent, 'WeightliftingCompWarmup-\d+\.\d+\.\d+-Signed\.aab', "WeightliftingCompWarmup-$DisplayVersion-Signed.aab")
+        Set-Content -Path $StoreListingFile -Value $ListingContent -NoNewline -Encoding UTF8
+    }
+
     Write-Host "=== Bumped Version: $OldDisplayVersion (build $OldVersionCode) -> $DisplayVersion (build $VersionCode) ===" -ForegroundColor Magenta
 } else {
     $DisplayVersion = $OldDisplayVersion
