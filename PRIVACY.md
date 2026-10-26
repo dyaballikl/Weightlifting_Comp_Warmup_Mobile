@@ -28,7 +28,7 @@ Your privacy is important to us. **Comp OWL does not collect, transmit, rent, se
 ## 3. Device Permissions and Network Access
 
 - **Offline Operation:** Comp OWL functions completely offline and does not make background network requests.
-- **External Links:** The "About" screen contains optional links to the project's public GitHub repositories and the developer's Instagram profile. Tapping these links opens your device's default web browser or app, which is governed by the respective third-party platform's privacy policy.
+- **External Links:** The "About" screen contains optional links to the project's public GitHub repositories, the developer's Instagram profile, and an optional Ko-fi support page (`ko-fi.com/compowlapp`). Tapping these links opens your device's default web browser or app, which is governed by the respective third-party platform's privacy policy.
 
 ---
 

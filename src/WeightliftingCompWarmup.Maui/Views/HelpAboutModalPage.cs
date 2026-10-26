@@ -19,8 +19,8 @@ public class HelpAboutModalPage : ContentPage
 
     public const string AppShortName = "Comp OWL";
     public const string AppFullName = "Weightlifting Comp Warmup";
-    public const string AppVersion = "2.0.10";
-    public const string AppBuild = "12";
+    public const string AppVersion = "2.0.11";
+    public const string AppBuild = "13";
 
     public HelpAboutModalPage(bool startOnAboutTab = false)
     {
@@ -501,6 +501,68 @@ public class HelpAboutModalPage : ContentPage
 
         licenseBorder.Content = licenseStack;
         stack.Add(licenseBorder);
+
+        // Optional Support / Ko-fi Card
+        var supportBorder = new Border
+        {
+            BackgroundColor = Color.FromArgb("#1E293B"),
+            Stroke = Color.FromArgb("#F59E0B"),
+            StrokeThickness = 1,
+            StrokeShape = new RoundRectangle { CornerRadius = 10 },
+            Padding = new Thickness(14, 12)
+        };
+
+        var supportStack = new VerticalStackLayout { Spacing = 6 };
+        supportStack.Add(new Label
+        {
+            Text = "SUPPORT COMP OWL (OPTIONAL)",
+            TextColor = Color.FromArgb("#FBBF24"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 11
+        });
+        supportStack.Add(new Label
+        {
+            Text = "Help Cover Annual License Maintenance",
+            TextColor = Color.FromArgb("#F8FAFC"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 14
+        });
+        supportStack.Add(new Label
+        {
+            Text = "Comp OWL is free, open-source, and built for the weightlifting community — I'm not looking to profit from this app. However, maintaining developer account licenses costs me around $150/year. If Comp OWL helps you or your lifters on competition day, an optional contribution on Ko-fi to help cover annual license maintenance is hugely appreciated!",
+            TextColor = Color.FromArgb("#CBD5E1"),
+            FontSize = 12.5,
+            LineHeight = 1.2
+        });
+
+        var kofiBtn = new Button
+        {
+            Text = "☕ Support Comp OWL on Ko-fi",
+            BackgroundColor = Color.FromArgb("#0284C7"),
+            BorderColor = Color.FromArgb("#38BDF8"),
+            BorderWidth = 1,
+            TextColor = Colors.White,
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 12.5,
+            CornerRadius = 8,
+            HeightRequest = 38,
+            Margin = new Thickness(0, 4, 0, 0)
+        };
+        kofiBtn.Clicked += async (_, _) =>
+        {
+            try
+            {
+                await Launcher.Default.OpenAsync("https://ko-fi.com/compowlapp");
+            }
+            catch
+            {
+                // Ignore if browser launcher unavailable
+            }
+        };
+        supportStack.Add(kofiBtn);
+
+        supportBorder.Content = supportStack;
+        stack.Add(supportBorder);
 
         return new ScrollView { Content = stack };
     }

@@ -47,8 +47,9 @@ powershell -ExecutionPolicy Bypass -File .\package-apps.ps1 -AndroidOnly
 
 ---
 
-## License & Privacy
+## License, Privacy & Support
 
 - **License:** Licensed under the **GNU General Public License v3.0** — see [LICENSE](./LICENSE) for details.
 - **Privacy Policy:** Comp OWL runs 100% offline and collects zero personal data — see [PRIVACY.md](./PRIVACY.md) for the full store-compliant privacy policy.
+- **Support Comp OWL (Optional):** Comp OWL is free, open-source, and not built for profit. However, maintaining developer account licenses costs around $150/year. If Comp OWL helps you on competition day, you can optionally chip in toward annual license maintenance at [ko-fi.com/compowlapp](https://ko-fi.com/compowlapp).
 - **Contact:** `dyaballikl@gmail.com` or [@lifting_while_diabetic](https://www.instagram.com/lifting_while_diabetic/) on Instagram.
