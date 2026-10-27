@@ -134,6 +134,29 @@ public class MainViewModel : INotifyPropertyChanged
 
     public void MarkWelcomeHelpSeen() => _storageService.MarkWelcomeHelpSeen();
 
+    public string ThemePreference
+    {
+        get => _storageService.ThemePreference;
+        set => SetThemePreference(value);
+    }
+
+    public void SetThemePreference(string? preference)
+    {
+        var normalized = ProfileStorageService.NormalizeThemePreference(preference);
+        _storageService.SetThemePreference(normalized);
+        AppThemeManager.SetPreference(normalized);
+        OnPropertyChanged(nameof(ThemePreference));
+        RefreshLiveStepsTheme();
+    }
+
+    public void RefreshLiveStepsTheme()
+    {
+        foreach (var step in LiveSteps)
+        {
+            step.RefreshThemeProperties();
+        }
+    }
+
     public string ActiveProfileName
     {
         get => ActiveProfile.Name;
@@ -910,6 +933,7 @@ public class MainViewModel : INotifyPropertyChanged
     public ICommand ForceStartStageNowCommand { get; }
     public ICommand ToggleCjSnatchExpandedCommand { get; }
     public ICommand ToggleCjBreakExpandedCommand { get; }
+    public ICommand CycleThemeCommand { get; }
 
     public MainViewModel(ProfileStorageService? storageService = null, DevicePlatformService? platformService = null)
     {
@@ -917,6 +941,20 @@ public class MainViewModel : INotifyPropertyChanged
         _platformService = platformService ?? new DevicePlatformService();
 
         _storageService.Load();
+        AppThemeManager.Initialize(_storageService.ThemePreference);
+        AppThemeManager.ThemeChanged += () =>
+        {
+            OnPropertyChanged(nameof(ThemePreference));
+            RefreshLiveStepsTheme();
+        };
+
+        CycleThemeCommand = new Command(() =>
+        {
+            var next = AppThemeManager.CycleNextPreference();
+            _storageService.SetThemePreference(next);
+            OnPropertyChanged(nameof(ThemePreference));
+            RefreshLiveStepsTheme();
+        });
 
         SelectSnatchCommand = new Command(() => SelectedLiftType = LiftType.Snatch);
         SelectCleanAndJerkCommand = new Command(() => SelectedLiftType = LiftType.CleanAndJerk);

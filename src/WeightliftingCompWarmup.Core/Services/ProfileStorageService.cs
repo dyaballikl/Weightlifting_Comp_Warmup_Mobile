@@ -10,6 +10,7 @@ public class SavedAppState
 {
     public string LastUsedProfileName { get; set; } = "Demo Profile";
     public bool HasSeenWelcomeHelp { get; set; }
+    public string ThemePreference { get; set; } = "System";
     public List<Profile> Profiles { get; set; } = new();
 }
 
@@ -19,6 +20,10 @@ public class SavedAppState
 /// </summary>
 public class ProfileStorageService
 {
+    public const string ThemeSystem = "System";
+    public const string ThemeDark = "Dark";
+    public const string ThemeLight = "Light";
+
     private readonly string _storageFilePath;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -30,6 +35,7 @@ public class ProfileStorageService
     public List<Profile> Profiles { get; private set; } = new();
     public Profile ActiveProfile { get; private set; } = Defaults.CreateDemoProfile();
     public bool HasSeenWelcomeHelp { get; private set; }
+    public string ThemePreference { get; private set; } = "System";
 
     public ProfileStorageService(string? storageFilePath = null)
     {
@@ -66,6 +72,7 @@ public class ProfileStorageService
                 {
                     Profiles = state.Profiles;
                     HasSeenWelcomeHelp = state.HasSeenWelcomeHelp;
+                    ThemePreference = NormalizeThemePreference(state.ThemePreference);
                     ActiveProfile = Profiles.FirstOrDefault(p =>
                         string.Equals(p.Name, state.LastUsedProfileName, StringComparison.OrdinalIgnoreCase))
                         ?? Profiles[0];
@@ -95,6 +102,34 @@ public class ProfileStorageService
     }
 
     /// <summary>
+    /// Sets and persists the app theme preference ("System", "Dark", or "Light").
+    /// </summary>
+    public void SetThemePreference(string? preference)
+    {
+        string normalized = NormalizeThemePreference(preference);
+        if (!string.Equals(ThemePreference, normalized, StringComparison.Ordinal))
+        {
+            ThemePreference = normalized;
+            Save();
+        }
+    }
+
+    public static string NormalizeThemePreference(string? preference)
+    {
+        if (string.Equals(preference?.Trim(), "Dark", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Dark";
+        }
+
+        if (string.Equals(preference?.Trim(), "Light", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Light";
+        }
+
+        return "System";
+    }
+
+    /// <summary>
     /// Saves all profiles and the currently active profile name to disk.
     /// </summary>
     public void Save()
@@ -104,6 +139,7 @@ public class ProfileStorageService
         {
             LastUsedProfileName = ActiveProfile.Name,
             HasSeenWelcomeHelp = HasSeenWelcomeHelp,
+            ThemePreference = ThemePreference,
             Profiles = Profiles
         };
 
@@ -225,6 +261,7 @@ public class ProfileStorageService
         var demo = Defaults.CreateDemoProfile();
         Profiles = new List<Profile> { demo };
         ActiveProfile = demo;
+        ThemePreference = "System";
         Save();
         return ActiveProfile;
     }

@@ -275,6 +275,38 @@ public class WarmupEngineTests
     }
 
     [Fact]
+    public void ProfileStorageService_PersistsAndNormalizesThemePreference()
+    {
+        string tempFile = Path.Combine(Path.GetTempPath(), $"wcw_theme_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            var storage = new ProfileStorageService(tempFile);
+            storage.Load();
+            Assert.Equal("System", storage.ThemePreference);
+
+            storage.SetThemePreference("Light");
+            Assert.Equal("Light", storage.ThemePreference);
+
+            var reloaded = new ProfileStorageService(tempFile);
+            reloaded.Load();
+            Assert.Equal("Light", reloaded.ThemePreference);
+
+            reloaded.SetThemePreference("dark");
+            Assert.Equal("Dark", reloaded.ThemePreference);
+
+            reloaded.SetThemePreference("invalid_value");
+            Assert.Equal("System", reloaded.ThemePreference);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [Fact]
     public void WarmupCalculator_HandlesEditedLowestFromWeightAboveBarbellWeight()
     {
         var profile = Defaults.CreateDemoProfile();

@@ -1,5 +1,6 @@
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
+using WeightliftingCompWarmup.Maui.Services;
 using WeightliftingCompWarmup.Maui.Views;
 
 namespace WeightliftingCompWarmup.Maui;
@@ -11,7 +12,8 @@ public class App : Application
     public App(MainPage mainPage)
     {
         _mainPage = mainPage;
-        UserAppTheme = AppTheme.Dark;
+        AppThemeManager.Initialize(AppThemeManager.CurrentPreference);
+        RequestedThemeChanged += (_, _) => AppThemeManager.RefreshFromSystemTheme();
     }
 
     protected override Window CreateWindow(IActivationState? activationState)
@@ -26,13 +28,16 @@ public class App : Application
         window.Resumed += (_, _) =>
         {
             wasBackgrounded = false;
+            AppThemeManager.RefreshFromSystemTheme();
             _mainPage.CheckForAppUpdate();
         };
         window.Activated += (_, _) =>
         {
+            AppThemeManager.UpdatePlatformStatusBar();
             if (wasBackgrounded)
             {
                 wasBackgrounded = false;
+                AppThemeManager.RefreshFromSystemTheme();
                 _mainPage.CheckForAppUpdate();
             }
         };

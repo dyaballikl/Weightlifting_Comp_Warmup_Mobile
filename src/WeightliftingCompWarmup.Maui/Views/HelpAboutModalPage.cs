@@ -1,42 +1,86 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.Maui;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Controls.Shapes;
 using Microsoft.Maui.Devices;
 using Microsoft.Maui.Graphics;
+using WeightliftingCompWarmup.Core.Services;
+using WeightliftingCompWarmup.Maui.Services;
 
 namespace WeightliftingCompWarmup.Maui.Views;
 
 /// <summary>
-/// Modal page providing a tabbed "How to Use (Help)" guide and "About Comp OWL" screen.
+/// Modal page providing a tabbed "How to Use (Help)" guide and "About Comp OWL" screen,
+/// plus a tri-mode Appearance switch (System / Dark / Light).
 /// Automatically shown on first launch and accessible anytime via the '?' header button.
 /// </summary>
 public class HelpAboutModalPage : ContentPage
 {
-    private readonly ContentView _tabContentContainer;
-    private readonly Button _helpTabBtn;
-    private readonly Button _aboutTabBtn;
+    private ContentView _tabContentContainer = null!;
+    private Button _helpTabBtn = null!;
+    private Button _aboutTabBtn = null!;
     private bool _isAboutTabSelected;
+    private readonly Action<string>? _onSelectTheme;
 
     public const string AppShortName = "Comp OWL";
     public const string AppFullName = "Weightlifting Comp Warmup";
-    public const string AppVersion = "2.0.26";
-    public const string AppBuild = "28";
+    public const string AppVersion = "2.0.27";
+    public const string AppBuild = "29";
     public const string AppleAppStoreId = ""; // Populate with numeric App Store Connect ID once created
 
-    public HelpAboutModalPage(bool startOnAboutTab = false)
+    public HelpAboutModalPage(bool startOnAboutTab = false, Action<string>? onSelectTheme = null)
     {
         Title = $"{AppShortName} — Help & About";
-        BackgroundColor = Color.FromArgb("#0B1120");
         NavigationPage.SetHasNavigationBar(this, false);
 
         _isAboutTabSelected = startOnAboutTab;
+        _onSelectTheme = onSelectTheme;
+
+        BuildModalLayout();
+    }
+
+    protected override void OnAppearing()
+    {
+        base.OnAppearing();
+        AppThemeManager.ThemeChanged += OnThemeChanged;
+    }
+
+    protected override void OnDisappearing()
+    {
+        AppThemeManager.ThemeChanged -= OnThemeChanged;
+        base.OnDisappearing();
+    }
+
+    private void OnThemeChanged()
+    {
+        MainThread.BeginInvokeOnMainThread(BuildModalLayout);
+    }
+
+    private void ApplySelectedTheme(string preference)
+    {
+        if (_onSelectTheme != null)
+        {
+            _onSelectTheme(preference);
+        }
+        else
+        {
+            AppThemeManager.SetPreference(preference);
+        }
+    }
+
+    private void BuildModalLayout()
+    {
+        BackgroundColor = AppThemeManager.Color("#0B1120");
 
         var outerGrid = new Grid
         {
             RowDefinitions =
             {
                 new RowDefinition { Height = GridLength.Auto }, // Top Title + Close bar
+                new RowDefinition { Height = GridLength.Auto }, // Tri-mode Appearance Switcher (System / Dark / Light)
                 new RowDefinition { Height = GridLength.Auto }, // Segmented Tab Switcher (Help vs About)
                 new RowDefinition { Height = GridLength.Star }, // Scrollable Tab Content
                 new RowDefinition { Height = GridLength.Auto }  // Bottom Action Button
@@ -50,8 +94,8 @@ public class HelpAboutModalPage : ContentPage
         // 1. Header Bar
         var headerBorder = new Border
         {
-            BackgroundColor = Color.FromArgb("#1E293B"),
-            Stroke = Color.FromArgb("#334155"),
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
+            Stroke = AppThemeManager.Color("#334155"),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 10 },
             Padding = new Thickness(14, 10)
@@ -75,24 +119,24 @@ public class HelpAboutModalPage : ContentPage
         titleStack.Add(new Label
         {
             Text = "🦉 Comp OWL — Olympic Weightlifting Warmup",
-            TextColor = Color.FromArgb("#F8FAFC"),
+            TextColor = AppThemeManager.Color("#F8FAFC"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 15
         });
         titleStack.Add(new Label
         {
             Text = "Competition & Training Warmup Timing Assistant",
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontSize = 11.5
         });
 
         var closeBtn = new Button
         {
             Text = "✕",
-            BackgroundColor = Color.FromArgb("#0F172A"),
-            BorderColor = Color.FromArgb("#475569"),
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            BorderColor = AppThemeManager.Color("#475569"),
             BorderWidth = 1,
-            TextColor = Color.FromArgb("#E2E8F0"),
+            TextColor = AppThemeManager.Color("#E2E8F0"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 14,
             CornerRadius = 8,
@@ -106,6 +150,49 @@ public class HelpAboutModalPage : ContentPage
         headerGrid.Add(titleStack, 0, 0);
         headerGrid.Add(closeBtn, 1, 0);
         headerBorder.Content = headerGrid;
+
+        // 1b. Tri-mode Appearance Switcher (System / Dark / Light)
+        var themeBorder = new Border
+        {
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
+            Stroke = AppThemeManager.Color("#334155"),
+            StrokeThickness = 1,
+            StrokeShape = new RoundRectangle { CornerRadius = 10 },
+            Padding = new Thickness(10, 8)
+        };
+
+        var themeGrid = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Auto },
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Star }
+            },
+            ColumnSpacing = 6,
+            VerticalOptions = LayoutOptions.Center
+        };
+
+        themeGrid.Add(new Label
+        {
+            Text = "THEME:",
+            TextColor = AppThemeManager.Color("#94A3B8"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 11,
+            VerticalTextAlignment = TextAlignment.Center,
+            Margin = new Thickness(2, 0, 4, 0)
+        }, 0, 0);
+
+        string currentPref = AppThemeManager.CurrentPreference;
+        var sysThemeBtn = CreateThemeSegmentButton("🌓 System", ProfileStorageService.ThemeSystem, currentPref == ProfileStorageService.ThemeSystem);
+        var darkThemeBtn = CreateThemeSegmentButton("🌙 Dark", ProfileStorageService.ThemeDark, currentPref == ProfileStorageService.ThemeDark);
+        var lightThemeBtn = CreateThemeSegmentButton("☀️ Light", ProfileStorageService.ThemeLight, currentPref == ProfileStorageService.ThemeLight);
+
+        themeGrid.Add(sysThemeBtn, 1, 0);
+        themeGrid.Add(darkThemeBtn, 2, 0);
+        themeGrid.Add(lightThemeBtn, 3, 0);
+        themeBorder.Content = themeGrid;
 
         // 2. Segmented Tab Bar (HOW TO USE vs ABOUT)
         var tabGrid = new Grid
@@ -149,7 +236,7 @@ public class HelpAboutModalPage : ContentPage
         {
             Text = "GOT IT — BACK TO WARMUP",
             BackgroundColor = Color.FromArgb("#0284C7"),
-            BorderColor = Color.FromArgb("#38BDF8"),
+            BorderColor = AppThemeManager.Color("#38BDF8"),
             BorderWidth = 1,
             TextColor = Colors.White,
             FontAttributes = FontAttributes.Bold,
@@ -160,12 +247,32 @@ public class HelpAboutModalPage : ContentPage
         footerBtn.Clicked += OnCloseClicked;
 
         outerGrid.Add(headerBorder, 0, 0);
-        outerGrid.Add(tabGrid, 0, 1);
-        outerGrid.Add(_tabContentContainer, 0, 2);
-        outerGrid.Add(footerBtn, 0, 3);
+        outerGrid.Add(themeBorder, 0, 1);
+        outerGrid.Add(tabGrid, 0, 2);
+        outerGrid.Add(_tabContentContainer, 0, 3);
+        outerGrid.Add(footerBtn, 0, 4);
 
         Content = outerGrid;
         SelectTab(_isAboutTabSelected);
+    }
+
+    private Button CreateThemeSegmentButton(string title, string preferenceValue, bool isSelected)
+    {
+        var btn = new Button
+        {
+            Text = title,
+            BackgroundColor = isSelected ? Color.FromArgb("#0284C7") : AppThemeManager.Color("#0F172A"),
+            BorderColor = isSelected ? AppThemeManager.Color("#38BDF8") : AppThemeManager.Color("#334155"),
+            BorderWidth = isSelected ? 1.5 : 1,
+            TextColor = isSelected ? Colors.White : AppThemeManager.Color("#94A3B8"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 11.5,
+            CornerRadius = 7,
+            HeightRequest = 32,
+            Padding = new Thickness(4, 0)
+        };
+        btn.Clicked += (_, _) => ApplySelectedTheme(preferenceValue);
+        return btn;
     }
 
     private void SelectTab(bool aboutTab)
@@ -182,10 +289,10 @@ public class HelpAboutModalPage : ContentPage
 
     private static void StyleTabButton(Button btn, bool isActive)
     {
-        btn.BackgroundColor = Color.FromArgb(isActive ? "#0284C7" : "#0F172A");
-        btn.BorderColor = Color.FromArgb(isActive ? "#38BDF8" : "#334155");
+        btn.BackgroundColor = isActive ? Color.FromArgb("#0284C7") : AppThemeManager.Color("#0F172A");
+        btn.BorderColor = isActive ? AppThemeManager.Color("#38BDF8") : AppThemeManager.Color("#334155");
         btn.BorderWidth = isActive ? 1.5 : 1;
-        btn.TextColor = Color.FromArgb(isActive ? "#FFFFFF" : "#94A3B8");
+        btn.TextColor = isActive ? Colors.White : AppThemeManager.Color("#94A3B8");
     }
 
     private View BuildHelpTabView()
@@ -206,12 +313,13 @@ public class HelpAboutModalPage : ContentPage
         // Card 2: Step 1 — Profiles & Bar Setup
         stack.Add(CreateStepCard(
             stepNumber: "1",
-            stepTitle: "Choose a Lifter Profile & Bar Weight",
+            stepTitle: "Choose a Lifter Profile, Bar Weight & Theme",
             bullets: new[]
             {
                 "Tap the 👤 Profile button (top-left) to switch lifters, create a new blank profile, duplicate an existing profile, or rename/delete profiles.",
                 "Tap the 🏋️ Bar button (top-right) to set the barbell weight (20 kg Men's bar, 15 kg Women's bar, or custom youth/technique bar).",
-                "Tap 🔔 Beep to toggle audio alerts when it is time for your next warmup lift."
+                "Tap 🔔 Beep to toggle audio alerts when it is time for your next warmup lift.",
+                "Tap 🌓/🌙/☀️ in the top header (or use the Theme bar above) to switch between System, Dark, and Light modes."
             }));
 
         // Card 3: Step 2 — Configure Snatch or Clean & Jerk Setup
@@ -253,7 +361,7 @@ public class HelpAboutModalPage : ContentPage
         // Card 6 (Bottom): Important Callout — Manual Stage Tracking vs Training Mode
         var scoreboardCard = new Border
         {
-            BackgroundColor = Color.FromArgb("#1E1B4B"),
+            BackgroundColor = AppThemeManager.Color("#1E1B4B"),
             Stroke = Color.FromArgb("#F59E0B"),
             StrokeThickness = 1.5,
             StrokeShape = new RoundRectangle { CornerRadius = 10 },
@@ -263,34 +371,34 @@ public class HelpAboutModalPage : ContentPage
         scoreboardStack.Add(new Label
         {
             Text = "⚠️ NO AUTOMATIC SCOREBOARD LINK",
-            TextColor = Color.FromArgb("#FBBF24"),
+            TextColor = AppThemeManager.Color("#FBBF24"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 12
         });
         scoreboardStack.Add(new Label
         {
             Text = "Comp OWL is NOT linked to the competition venue scoreboard or marshaling system. During a live competition, you must manually advance the stage lifts as attempts happen on stage, or update your 'Lifts Out' count when lifters ahead of you change weights or pass.",
-            TextColor = Color.FromArgb("#F8FAFC"),
+            TextColor = AppThemeManager.Color("#F8FAFC"),
             FontSize = 12.5,
             LineHeight = 1.2
         });
         scoreboardStack.Add(new BoxView
         {
             HeightRequest = 1,
-            Color = Color.FromArgb("#312E81"),
+            Color = AppThemeManager.Color("#312E81"),
             Margin = new Thickness(0, 2)
         });
         scoreboardStack.Add(new Label
         {
             Text = "⏱️ TRAINING / PRACTICE COMPETITION MODE (AUTO-ADVANCE)",
-            TextColor = Color.FromArgb("#4ADE80"),
+            TextColor = AppThemeManager.Color("#4ADE80"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 11.5
         });
         scoreboardStack.Add(new Label
         {
             Text = "In the Live screen, you can check 'Auto-advance when stage lift timer hits 0s'. This automatically ticks off a stage lift each time the stage clock expires — perfect for solo training sessions or running a realistic practice competition 1–2 weeks out from meet day!",
-            TextColor = Color.FromArgb("#E2E8F0"),
+            TextColor = AppThemeManager.Color("#E2E8F0"),
             FontSize = 12,
             LineHeight = 1.2
         });
@@ -311,8 +419,8 @@ public class HelpAboutModalPage : ContentPage
         // Hero Card
         var heroBorder = new Border
         {
-            BackgroundColor = Color.FromArgb("#1E293B"),
-            Stroke = Color.FromArgb("#38BDF8"),
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
+            Stroke = AppThemeManager.Color("#38BDF8"),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 12 },
             Padding = new Thickness(16, 16)
@@ -334,7 +442,7 @@ public class HelpAboutModalPage : ContentPage
         heroStack.Add(new Label
         {
             Text = "Comp OWL",
-            TextColor = Color.FromArgb("#F8FAFC"),
+            TextColor = AppThemeManager.Color("#F8FAFC"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 24,
             HorizontalTextAlignment = TextAlignment.Center
@@ -343,7 +451,7 @@ public class HelpAboutModalPage : ContentPage
         heroStack.Add(new Label
         {
             Text = "Competition Olympic WeightLifting Warmup",
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 13,
             HorizontalTextAlignment = TextAlignment.Center
@@ -352,7 +460,7 @@ public class HelpAboutModalPage : ContentPage
         heroStack.Add(new Label
         {
             Text = $"Version {AppVersion} (Build {AppBuild}) • Android & iOS",
-            TextColor = Color.FromArgb("#94A3B8"),
+            TextColor = AppThemeManager.Color("#94A3B8"),
             FontSize = 12,
             HorizontalTextAlignment = TextAlignment.Center
         });
@@ -363,7 +471,7 @@ public class HelpAboutModalPage : ContentPage
         // Optional Support / Ko-fi Card
         var supportBorder = new Border
         {
-            BackgroundColor = Color.FromArgb("#1E293B"),
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
             Stroke = Color.FromArgb("#F59E0B"),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 10 },
@@ -374,21 +482,21 @@ public class HelpAboutModalPage : ContentPage
         supportStack.Add(new Label
         {
             Text = "SUPPORT COMP OWL (OPTIONAL)",
-            TextColor = Color.FromArgb("#FBBF24"),
+            TextColor = AppThemeManager.Color("#FBBF24"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 11
         });
         supportStack.Add(new Label
         {
             Text = "Help Cover Annual License Maintenance",
-            TextColor = Color.FromArgb("#F8FAFC"),
+            TextColor = AppThemeManager.Color("#F8FAFC"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 14
         });
         supportStack.Add(new Label
         {
             Text = "Comp OWL is free, open-source, and built for the weightlifting community — I'm not looking to profit from this app. However, maintaining developer account licenses costs me around $150/year. If Comp OWL helps you or your lifters on competition day, an optional contribution on Ko-fi to help cover annual license maintenance is hugely appreciated!",
-            TextColor = Color.FromArgb("#CBD5E1"),
+            TextColor = AppThemeManager.Color("#CBD5E1"),
             FontSize = 12.5,
             LineHeight = 1.2
         });
@@ -397,7 +505,7 @@ public class HelpAboutModalPage : ContentPage
         {
             Text = "☕ Support Comp OWL on Ko-fi",
             BackgroundColor = Color.FromArgb("#0284C7"),
-            BorderColor = Color.FromArgb("#38BDF8"),
+            BorderColor = AppThemeManager.Color("#38BDF8"),
             BorderWidth = 1,
             TextColor = Colors.White,
             FontAttributes = FontAttributes.Bold,
@@ -443,8 +551,8 @@ public class HelpAboutModalPage : ContentPage
 
             var rateBorder = new Border
             {
-                BackgroundColor = Color.FromArgb("#1E293B"),
-                Stroke = Color.FromArgb("#38BDF8"),
+                BackgroundColor = AppThemeManager.Color("#1E293B"),
+                Stroke = AppThemeManager.Color("#38BDF8"),
                 StrokeThickness = 1,
                 StrokeShape = new RoundRectangle { CornerRadius = 10 },
                 Padding = new Thickness(14, 12)
@@ -454,21 +562,21 @@ public class HelpAboutModalPage : ContentPage
             rateStack.Add(new Label
             {
                 Text = storeBadgeText,
-                TextColor = Color.FromArgb("#38BDF8"),
+                TextColor = AppThemeManager.Color("#38BDF8"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = 11
             });
             rateStack.Add(new Label
             {
                 Text = "Enjoying Comp OWL on Competition Day?",
-                TextColor = Color.FromArgb("#F8FAFC"),
+                TextColor = AppThemeManager.Color("#F8FAFC"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = 14
             });
             rateStack.Add(new Label
             {
                 Text = $"Leaving a quick rating or review on the {storeNameText} helps other weightlifters, coaches, and handlers discover Comp OWL.",
-                TextColor = Color.FromArgb("#CBD5E1"),
+                TextColor = AppThemeManager.Color("#CBD5E1"),
                 FontSize = 12.5,
                 LineHeight = 1.2
             });
@@ -476,10 +584,10 @@ public class HelpAboutModalPage : ContentPage
             var rateBtn = new Button
             {
                 Text = rateButtonText,
-                BackgroundColor = Color.FromArgb("#0F172A"),
-                BorderColor = Color.FromArgb("#38BDF8"),
+                BackgroundColor = AppThemeManager.Color("#0F172A"),
+                BorderColor = AppThemeManager.Color("#38BDF8"),
                 BorderWidth = 1,
-                TextColor = Color.FromArgb("#FACC15"),
+                TextColor = AppThemeManager.Color("#FACC15"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = 12.5,
                 CornerRadius = 8,
@@ -510,8 +618,8 @@ public class HelpAboutModalPage : ContentPage
         // Open Source & License Card
         var licenseBorder = new Border
         {
-            BackgroundColor = Color.FromArgb("#1E293B"),
-            Stroke = Color.FromArgb("#334155"),
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
+            Stroke = AppThemeManager.Color("#334155"),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 10 },
             Padding = new Thickness(14, 12)
@@ -521,7 +629,7 @@ public class HelpAboutModalPage : ContentPage
         licenseStack.Add(new Label
         {
             Text = "OPEN SOURCE & LICENSE",
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 11
         });
@@ -534,14 +642,14 @@ public class HelpAboutModalPage : ContentPage
                     new Span
                     {
                         Text = "Created by Matt Cunningham - ",
-                        TextColor = Color.FromArgb("#F8FAFC"),
+                        TextColor = AppThemeManager.Color("#F8FAFC"),
                         FontAttributes = FontAttributes.Bold,
                         FontSize = 13
                     },
                     new Span
                     {
                         Text = "@lifting_while_diabetic",
-                        TextColor = Color.FromArgb("#38BDF8"),
+                        TextColor = AppThemeManager.Color("#38BDF8"),
                         FontAttributes = FontAttributes.Bold,
                         TextDecorations = TextDecorations.Underline,
                         FontSize = 13
@@ -566,7 +674,7 @@ public class HelpAboutModalPage : ContentPage
         licenseStack.Add(new Label
         {
             Text = "GNU General Public License v3.0 (GPL-3.0) • Based on the original Windows desktop Weightlifting_Comp_Warmup application. Free and open-source software distributed under the terms of the GPL-3.0 license.",
-            TextColor = Color.FromArgb("#CBD5E1"),
+            TextColor = AppThemeManager.Color("#CBD5E1"),
             FontSize = 12,
             LineHeight = 1.2
         });
@@ -585,10 +693,10 @@ public class HelpAboutModalPage : ContentPage
         var mobileRepoBtn = new Button
         {
             Text = "🌐 Mobile GitHub Repo",
-            BackgroundColor = Color.FromArgb("#0F172A"),
-            BorderColor = Color.FromArgb("#475569"),
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            BorderColor = AppThemeManager.Color("#475569"),
             BorderWidth = 1,
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 11.5,
             CornerRadius = 8,
@@ -609,10 +717,10 @@ public class HelpAboutModalPage : ContentPage
         var desktopRepoBtn = new Button
         {
             Text = "💻 Desktop GitHub Repo",
-            BackgroundColor = Color.FromArgb("#0F172A"),
-            BorderColor = Color.FromArgb("#475569"),
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            BorderColor = AppThemeManager.Color("#475569"),
             BorderWidth = 1,
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 11.5,
             CornerRadius = 8,
@@ -644,8 +752,8 @@ public class HelpAboutModalPage : ContentPage
     {
         var border = new Border
         {
-            BackgroundColor = Color.FromArgb("#1E293B"),
-            Stroke = Color.FromArgb("#334155"),
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
+            Stroke = AppThemeManager.Color("#334155"),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 10 },
             Padding = new Thickness(14, 12)
@@ -655,21 +763,21 @@ public class HelpAboutModalPage : ContentPage
         stack.Add(new Label
         {
             Text = badgeText,
-            TextColor = Color.FromArgb(badgeColorHex),
+            TextColor = AppThemeManager.Color(badgeColorHex),
             FontAttributes = FontAttributes.Bold,
             FontSize = 11
         });
         stack.Add(new Label
         {
             Text = title,
-            TextColor = Color.FromArgb("#F8FAFC"),
+            TextColor = AppThemeManager.Color("#F8FAFC"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 14
         });
         stack.Add(new Label
         {
             Text = body,
-            TextColor = Color.FromArgb("#CBD5E1"),
+            TextColor = AppThemeManager.Color("#CBD5E1"),
             FontSize = 12.5,
             LineHeight = 1.2
         });
@@ -682,8 +790,8 @@ public class HelpAboutModalPage : ContentPage
     {
         var border = new Border
         {
-            BackgroundColor = Color.FromArgb("#1E293B"),
-            Stroke = Color.FromArgb("#334155"),
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
+            Stroke = AppThemeManager.Color("#334155"),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 10 },
             Padding = new Thickness(14, 12)
@@ -704,7 +812,7 @@ public class HelpAboutModalPage : ContentPage
         var badge = new Border
         {
             BackgroundColor = Color.FromArgb("#0284C7"),
-            Stroke = Color.FromArgb("#38BDF8"),
+            Stroke = AppThemeManager.Color("#38BDF8"),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 6 },
             WidthRequest = 24,
@@ -724,7 +832,7 @@ public class HelpAboutModalPage : ContentPage
         var titleLbl = new Label
         {
             Text = stepTitle,
-            TextColor = Color.FromArgb("#F8FAFC"),
+            TextColor = AppThemeManager.Color("#F8FAFC"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 13.5,
             VerticalTextAlignment = TextAlignment.Center
@@ -749,7 +857,7 @@ public class HelpAboutModalPage : ContentPage
             bulletGrid.Add(new Label
             {
                 Text = "•",
-                TextColor = Color.FromArgb("#38BDF8"),
+                TextColor = AppThemeManager.Color("#38BDF8"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = 13,
                 VerticalTextAlignment = TextAlignment.Start
@@ -758,7 +866,7 @@ public class HelpAboutModalPage : ContentPage
             bulletGrid.Add(new Label
             {
                 Text = bullet,
-                TextColor = Color.FromArgb("#CBD5E1"),
+                TextColor = AppThemeManager.Color("#CBD5E1"),
                 FontSize = 12,
                 LineHeight = 1.2
             }, 1, 0);

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using WeightliftingCompWarmup.Core.Models;
 using WeightliftingCompWarmup.Core.Services;
+using WeightliftingCompWarmup.Maui.Services;
 
 namespace WeightliftingCompWarmup.Maui.ViewModels;
 
@@ -128,51 +129,62 @@ public class LiveStepItemViewModel : INotifyPropertyChanged
     public string RowBackgroundHex => Status switch
     {
         StepRunStatus.Active => "#FACC15",     // High-visibility Competition Yellow
-        StepRunStatus.Completed => "#0F172A",  // Dimmed slate for completed steps
-        _ => "#1E293B"                         // Standard card slate for upcoming steps
+        StepRunStatus.Completed => AppThemeManager.IsLightTheme ? "#F1F5F9" : "#0F172A",
+        _ => AppThemeManager.IsLightTheme ? "#FFFFFF" : "#1E293B"
     };
 
     public string RowBorderHex => Status switch
     {
-        StepRunStatus.Active => "#FEF08A",
-        StepRunStatus.Completed => "#1E293B",
-        _ => "#334155"
+        StepRunStatus.Active => AppThemeManager.IsLightTheme ? "#EAB308" : "#FEF08A",
+        StepRunStatus.Completed => AppThemeManager.IsLightTheme ? "#E2E8F0" : "#1E293B",
+        _ => AppThemeManager.IsLightTheme ? "#CBD5E1" : "#334155"
     };
 
     public string PrimaryTextHex => Status switch
     {
         StepRunStatus.Active => "#0F172A",
         StepRunStatus.Completed => "#64748B",
-        _ => "#F8FAFC"
+        _ => AppThemeManager.IsLightTheme ? "#0F172A" : "#F8FAFC"
     };
 
     public string SecondaryTextHex => Status switch
     {
         StepRunStatus.Active => "#1E293B",
-        StepRunStatus.Completed => "#475569",
-        _ => "#94A3B8"
+        StepRunStatus.Completed => AppThemeManager.IsLightTheme ? "#94A3B8" : "#475569",
+        _ => AppThemeManager.IsLightTheme ? "#475569" : "#94A3B8"
     };
 
     public string BadgeBackgroundHex => Status switch
     {
         StepRunStatus.Active => "#0F172A",
-        StepRunStatus.Completed => "#1E293B",
-        _ => "#0F172A"
+        StepRunStatus.Completed => AppThemeManager.IsLightTheme ? "#E2E8F0" : "#1E293B",
+        _ => AppThemeManager.IsLightTheme ? "#F1F5F9" : "#0F172A"
     };
 
     public string BadgeTextHex => Status switch
     {
         StepRunStatus.Active => "#FACC15",
         StepRunStatus.Completed => "#64748B",
-        _ => "#38BDF8"
+        _ => AppThemeManager.IsLightTheme ? "#0284C7" : "#38BDF8"
     };
 
     public string ProgressColorHex => Status switch
     {
         StepRunStatus.Active => "#16A34A",
-        StepRunStatus.Completed => "#334155",
+        StepRunStatus.Completed => AppThemeManager.IsLightTheme ? "#94A3B8" : "#334155",
         _ => "#0284C7"
     };
+
+    public void RefreshThemeProperties()
+    {
+        OnPropertyChanged(nameof(RowBackgroundHex));
+        OnPropertyChanged(nameof(RowBorderHex));
+        OnPropertyChanged(nameof(PrimaryTextHex));
+        OnPropertyChanged(nameof(SecondaryTextHex));
+        OnPropertyChanged(nameof(BadgeBackgroundHex));
+        OnPropertyChanged(nameof(BadgeTextHex));
+        OnPropertyChanged(nameof(ProgressColorHex));
+    }
 
     public double ProgressFraction
     {

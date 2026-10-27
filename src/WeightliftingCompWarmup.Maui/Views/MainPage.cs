@@ -32,6 +32,7 @@ public class MainPage : ContentPage
     private readonly View _pipOverlayHost;
     private TaskCompletionSource<string?>? _activePromptTcs;
     private readonly ContentView _headerContainer;
+    private readonly ContentView _bannerContainer;
     private readonly ContentView _bodyContainer;
     private readonly List<Layout> _activeBindableLayouts = new();
     private ScrollView? _liveStepsScrollView;
@@ -39,6 +40,7 @@ public class MainPage : ContentPage
     private int _scrollRequestVersion;
 
     private Button? _beepHeaderBtn;
+    private Button? _themeHeaderBtn;
     private Button? _snatchHeaderBtn;
     private Button? _cjHeaderBtn;
     private Button? _setupHeaderBtn;
@@ -50,7 +52,7 @@ public class MainPage : ContentPage
         BindingContext = _vm;
 
         Title = "Comp OWL";
-        BackgroundColor = Color.FromArgb("#0B1120");
+        BackgroundColor = AppThemeManager.Color("#0B1120");
         NavigationPage.SetHasNavigationBar(this, false);
 
         _rootGrid = new Grid
@@ -66,25 +68,19 @@ public class MainPage : ContentPage
         };
 
         _headerContainer = new ContentView();
+        _bannerContainer = new ContentView();
         _bodyContainer = new ContentView();
 
         _headerContainer.Content = BuildTopNavigationHeader();
+        _bannerContainer.Content = BuildBannersStack();
         _rootGrid.Add(_headerContainer, 0, 0);
-        _rootGrid.Add(new VerticalStackLayout
-        {
-            Spacing = 6,
-            Children =
-            {
-                BuildUpdateAvailableBanner(),
-                BuildStatusBanner()
-            }
-        }, 0, 1);
+        _rootGrid.Add(_bannerContainer, 0, 1);
         _rootGrid.Add(_bodyContainer, 0, 2);
 
         _promptOverlayHost = new Grid
         {
             IsVisible = false,
-            BackgroundColor = Color.FromArgb("#B3020617"),
+            BackgroundColor = AppThemeManager.Color("#B3020617"),
             ZIndex = 100
         };
 
@@ -98,8 +94,38 @@ public class MainPage : ContentPage
         Content = _pageRootHost;
 
         _vm.PropertyChanged += OnViewModelPropertyChanged;
+        AppThemeManager.ThemeChanged += OnAppThemeChanged;
         DevicePlatformService.PipModeChanged += OnPipModeChanged;
         DevicePlatformService.BackgroundOverlayTick += HandleUiTimerTick;
+    }
+
+    private View BuildBannersStack()
+    {
+        return new VerticalStackLayout
+        {
+            Spacing = 6,
+            Children =
+            {
+                BuildUpdateAvailableBanner(),
+                BuildStatusBanner()
+            }
+        };
+    }
+
+    private void OnAppThemeChanged()
+    {
+        Dispatcher.Dispatch(() =>
+        {
+            BackgroundColor = AppThemeManager.Color("#0B1120");
+            _promptOverlayHost.BackgroundColor = AppThemeManager.Color("#B3020617");
+            _headerContainer.Content = BuildTopNavigationHeader();
+            _bannerContainer.Content = BuildBannersStack();
+            if (_layoutInitialized)
+            {
+                RebuildBodyLayout();
+            }
+            _vm.RefreshLiveStepsTheme();
+        });
     }
 
     private void HandleUiTimerTick()
@@ -275,7 +301,7 @@ public class MainPage : ContentPage
                 {
                     if (Navigation.ModalStack.Count == 0)
                     {
-                        await Navigation.PushModalAsync(new HelpAboutModalPage(startOnAboutTab: false), animated: true);
+                        await Navigation.PushModalAsync(new HelpAboutModalPage(startOnAboutTab: false, onSelectTheme: pref => _vm.SetThemePreference(pref)), animated: true);
                     }
                 });
             }
@@ -324,7 +350,8 @@ public class MainPage : ContentPage
     {
         if (e.PropertyName is nameof(MainViewModel.BeepOnNextLift)
             or nameof(MainViewModel.SelectedLiftType)
-            or nameof(MainViewModel.IsLiveMode))
+            or nameof(MainViewModel.IsLiveMode)
+            or nameof(MainViewModel.ThemePreference))
         {
             UpdateHeaderVisualState();
         }
@@ -461,7 +488,7 @@ public class MainPage : ContentPage
         var headerCard = CreateCardBorder(padding: compact ? new Thickness(8, 6) : new Thickness(12, 10));
         var stack = new VerticalStackLayout { Spacing = compact ? 6 : 8 };
 
-        // Row 1: Active Profile Button + Global Settings (Bar Weight + Beep + Help/About)
+        // Row 1: Active Profile Button + Global Settings (Bar Weight + Beep + Theme + Help/About)
         var topRow = new Grid
         {
             ColumnDefinitions =
@@ -469,21 +496,22 @@ public class MainPage : ContentPage
                 new ColumnDefinition { Width = GridLength.Star },
                 new ColumnDefinition { Width = GridLength.Auto },
                 new ColumnDefinition { Width = GridLength.Auto },
+                new ColumnDefinition { Width = GridLength.Auto },
                 new ColumnDefinition { Width = GridLength.Auto }
             },
-            ColumnSpacing = compact ? 5 : 8
+            ColumnSpacing = compact ? 4 : 8
         };
 
         var profileBtn = new Button
         {
-            BackgroundColor = Color.FromArgb("#1E293B"),
-            BorderColor = Color.FromArgb("#38BDF8"),
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
+            BorderColor = AppThemeManager.Color("#38BDF8"),
             BorderWidth = 1,
-            TextColor = Color.FromArgb("#F8FAFC"),
+            TextColor = AppThemeManager.Color("#F8FAFC"),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 12 : 13,
             CornerRadius = 8,
-            Padding = compact ? new Thickness(5, 2) : new Thickness(12, 6),
+            Padding = compact ? new Thickness(4, 2) : new Thickness(12, 6),
             HeightRequest = compact ? 34 : 40,
             HorizontalOptions = compact ? LayoutOptions.Fill : LayoutOptions.Start
         };
@@ -492,14 +520,14 @@ public class MainPage : ContentPage
 
         var barBtn = new Button
         {
-            BackgroundColor = Color.FromArgb("#0F172A"),
-            BorderColor = Color.FromArgb("#475569"),
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            BorderColor = AppThemeManager.Color("#475569"),
             BorderWidth = 1,
-            TextColor = Color.FromArgb("#E2E8F0"),
+            TextColor = AppThemeManager.Color("#E2E8F0"),
             FontSize = compact ? 11.5 : 12,
             FontAttributes = FontAttributes.Bold,
             CornerRadius = 8,
-            Padding = compact ? new Thickness(7, 2) : new Thickness(10, 6),
+            Padding = compact ? new Thickness(6, 2) : new Thickness(10, 6),
             HeightRequest = compact ? 34 : 40
         };
         barBtn.SetBinding(Button.TextProperty, new Binding(nameof(MainViewModel.BarbellWeight), stringFormat: compact ? "🏋️ {0}kg" : "🏋️ Bar: {0}kg"));
@@ -507,28 +535,42 @@ public class MainPage : ContentPage
 
         var beepBtn = new Button
         {
-            BackgroundColor = Color.FromArgb("#0F172A"),
-            BorderColor = Color.FromArgb("#475569"),
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            BorderColor = AppThemeManager.Color("#475569"),
             BorderWidth = 1,
             FontSize = compact ? 11.5 : 12,
             CornerRadius = 8,
-            Padding = compact ? new Thickness(7, 2) : new Thickness(10, 6),
+            Padding = compact ? new Thickness(6, 2) : new Thickness(10, 6),
             HeightRequest = compact ? 34 : 40
         };
         beepBtn.Clicked += (_, _) => _vm.BeepOnNextLift = !_vm.BeepOnNextLift;
         _beepHeaderBtn = beepBtn;
 
+        var themeBtn = new Button
+        {
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            BorderColor = AppThemeManager.Color("#475569"),
+            BorderWidth = 1,
+            FontSize = compact ? 11.5 : 12,
+            FontAttributes = FontAttributes.Bold,
+            CornerRadius = 8,
+            Padding = compact ? new Thickness(6, 2) : new Thickness(10, 6),
+            HeightRequest = compact ? 34 : 40,
+            Command = _vm.CycleThemeCommand
+        };
+        _themeHeaderBtn = themeBtn;
+
         var helpBtn = new Button
         {
             Text = compact ? "❓" : "❓ Help",
-            BackgroundColor = Color.FromArgb("#0F172A"),
-            BorderColor = Color.FromArgb("#38BDF8"),
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            BorderColor = AppThemeManager.Color("#38BDF8"),
             BorderWidth = 1,
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 11.5 : 12,
             CornerRadius = 8,
-            Padding = compact ? new Thickness(8, 2) : new Thickness(10, 6),
+            Padding = compact ? new Thickness(7, 2) : new Thickness(10, 6),
             HeightRequest = compact ? 34 : 40
         };
         helpBtn.Clicked += OnHelpAboutClicked;
@@ -536,7 +578,8 @@ public class MainPage : ContentPage
         topRow.Add(profileBtn, 0, 0);
         topRow.Add(barBtn, 1, 0);
         topRow.Add(beepBtn, 2, 0);
-        topRow.Add(helpBtn, 3, 0);
+        topRow.Add(themeBtn, 3, 0);
+        topRow.Add(helpBtn, 4, 0);
 
         // Row 2: Discipline Selector (SNATCH vs CLEAN & JERK) + Mode Selector (SETUP vs LIVE)
         var navRow = new Grid
@@ -593,8 +636,22 @@ public class MainPage : ContentPage
             _beepHeaderBtn.Text = compact
                 ? (_vm.BeepOnNextLift ? "🔔 ON" : "🔕 OFF")
                 : (_vm.BeepOnNextLift ? "🔔 Beep: ON" : "🔕 Beep: OFF");
-            _beepHeaderBtn.TextColor = _vm.BeepOnNextLift ? Color.FromArgb("#4ADE80") : Color.FromArgb("#94A3B8");
-            _beepHeaderBtn.BorderColor = _vm.BeepOnNextLift ? Color.FromArgb("#22C55E") : Color.FromArgb("#475569");
+            _beepHeaderBtn.BackgroundColor = AppThemeManager.Color("#0F172A");
+            _beepHeaderBtn.TextColor = _vm.BeepOnNextLift ? AppThemeManager.Color("#4ADE80") : AppThemeManager.Color("#94A3B8");
+            _beepHeaderBtn.BorderColor = _vm.BeepOnNextLift ? AppThemeManager.Color("#22C55E") : AppThemeManager.Color("#475569");
+        }
+
+        if (_themeHeaderBtn != null)
+        {
+            _themeHeaderBtn.Text = _vm.ThemePreference switch
+            {
+                "Dark" => compact ? "🌙 Dark" : "🌙 Theme: Dark",
+                "Light" => compact ? "☀️ Light" : "☀️ Theme: Light",
+                _ => compact ? "🌓 Auto" : "🌓 Theme: Auto"
+            };
+            _themeHeaderBtn.BackgroundColor = AppThemeManager.Color("#0F172A");
+            _themeHeaderBtn.TextColor = AppThemeManager.Color("#E2E8F0");
+            _themeHeaderBtn.BorderColor = AppThemeManager.Color("#475569");
         }
 
         if (_snatchHeaderBtn != null)
@@ -619,8 +676,8 @@ public class MainPage : ContentPage
     {
         var border = new Border
         {
-            BackgroundColor = Color.FromArgb("#422006"),
-            Stroke = Color.FromArgb("#FACC15"),
+            BackgroundColor = AppThemeManager.Color("#422006"),
+            Stroke = AppThemeManager.Color("#FACC15"),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 8 },
             Padding = new Thickness(12, 6)
@@ -640,7 +697,7 @@ public class MainPage : ContentPage
 
         var label = new Label
         {
-            TextColor = Color.FromArgb("#FEF08A"),
+            TextColor = AppThemeManager.Color("#FEF08A"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 12,
             VerticalTextAlignment = TextAlignment.Center
@@ -665,7 +722,7 @@ public class MainPage : ContentPage
         {
             Text = "✕",
             BackgroundColor = Colors.Transparent,
-            TextColor = Color.FromArgb("#FDE047"),
+            TextColor = AppThemeManager.Color("#FDE047"),
             FontSize = 12,
             Padding = new Thickness(6, 0),
             HeightRequest = 26,
@@ -684,8 +741,8 @@ public class MainPage : ContentPage
     {
         var border = new Border
         {
-            BackgroundColor = Color.FromArgb("#0C4A6E"),
-            Stroke = Color.FromArgb("#38BDF8"),
+            BackgroundColor = AppThemeManager.Color("#0C4A6E"),
+            Stroke = AppThemeManager.Color("#38BDF8"),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 8 },
             Padding = new Thickness(12, 6)
@@ -703,7 +760,7 @@ public class MainPage : ContentPage
 
         var label = new Label
         {
-            TextColor = Color.FromArgb("#E0F2FE"),
+            TextColor = AppThemeManager.Color("#E0F2FE"),
             FontSize = 12,
             VerticalTextAlignment = TextAlignment.Center
         };
@@ -713,7 +770,7 @@ public class MainPage : ContentPage
         {
             Text = "✕",
             BackgroundColor = Colors.Transparent,
-            TextColor = Color.FromArgb("#7DD3FC"),
+            TextColor = AppThemeManager.Color("#7DD3FC"),
             FontSize = 12,
             Padding = new Thickness(6, 0),
             HeightRequest = 26
@@ -867,7 +924,7 @@ public class MainPage : ContentPage
         var titleLbl = new Label
         {
             Text = $"{_vm.CurrentLiftTitle} SETUP PARAMETERS",
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 12.5 : 14,
             VerticalTextAlignment = TextAlignment.Center
@@ -905,7 +962,7 @@ public class MainPage : ContentPage
             openerLabelRow.Add(new Label
             {
                 Text = "Opener Weight (kg)",
-                TextColor = Color.FromArgb("#F8FAFC"),
+                TextColor = AppThemeManager.Color("#F8FAFC"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = 13,
                 VerticalTextAlignment = TextAlignment.Center
@@ -913,7 +970,7 @@ public class MainPage : ContentPage
             openerLabelRow.Add(new Label
             {
                 Text = "Tap weight to type directly",
-                TextColor = Color.FromArgb("#64748B"),
+                TextColor = AppThemeManager.Color("#64748B"),
                 FontSize = 10.5,
                 VerticalTextAlignment = TextAlignment.Center
             }, 1, 0);
@@ -938,8 +995,8 @@ public class MainPage : ContentPage
                     Text = text,
                     Command = _vm.AdjustOpenerWeightCommand,
                     CommandParameter = param,
-                    BackgroundColor = Color.FromArgb("#334155"),
-                    TextColor = Colors.White,
+                    BackgroundColor = AppThemeManager.NeutralButtonBackground,
+                    TextColor = AppThemeManager.NeutralButtonText,
                     FontAttributes = FontAttributes.Bold,
                     FontSize = 13,
                     CornerRadius = 6,
@@ -951,10 +1008,10 @@ public class MainPage : ContentPage
 
             var openerValueBtn = new Button
             {
-                BackgroundColor = Color.FromArgb("#0F172A"),
-                BorderColor = Color.FromArgb("#38BDF8"),
+                BackgroundColor = AppThemeManager.Color("#0F172A"),
+                BorderColor = AppThemeManager.Color("#38BDF8"),
                 BorderWidth = 1.5,
-                TextColor = Color.FromArgb("#FACC15"),
+                TextColor = AppThemeManager.Color("#FACC15"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = 15,
                 CornerRadius = 8,
@@ -997,10 +1054,10 @@ public class MainPage : ContentPage
 
             var openerValueBtn = new Button
             {
-                BackgroundColor = Color.FromArgb("#0F172A"),
-                BorderColor = Color.FromArgb("#38BDF8"),
+                BackgroundColor = AppThemeManager.Color("#0F172A"),
+                BorderColor = AppThemeManager.Color("#38BDF8"),
                 BorderWidth = 1.5,
-                TextColor = Color.FromArgb("#FACC15"),
+                TextColor = AppThemeManager.Color("#FACC15"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = 16,
                 CornerRadius = 8,
@@ -1040,8 +1097,8 @@ public class MainPage : ContentPage
         {
             var timePicker = new TimePicker
             {
-                TextColor = Color.FromArgb("#F8FAFC"),
-                BackgroundColor = Color.FromArgb("#0F172A"),
+                TextColor = AppThemeManager.Color("#F8FAFC"),
+                BackgroundColor = AppThemeManager.EntryBackground,
                 FontAttributes = FontAttributes.Bold,
                 FontSize = compact ? 14 : 15,
                 HorizontalOptions = compact ? LayoutOptions.Fill : LayoutOptions.End,
@@ -1063,7 +1120,7 @@ public class MainPage : ContentPage
                 startLabelRow.Add(new Label
                 {
                     Text = "Competition Start Time",
-                    TextColor = Color.FromArgb("#F8FAFC"),
+                    TextColor = AppThemeManager.Color("#F8FAFC"),
                     FontAttributes = FontAttributes.Bold,
                     FontSize = 13,
                     VerticalTextAlignment = TextAlignment.Center
@@ -1071,7 +1128,7 @@ public class MainPage : ContentPage
                 startLabelRow.Add(new Label
                 {
                     Text = "Scheduled session start",
-                    TextColor = Color.FromArgb("#64748B"),
+                    TextColor = AppThemeManager.Color("#64748B"),
                     FontSize = 10.5,
                     VerticalTextAlignment = TextAlignment.Center
                 }, 1, 0);
@@ -1192,14 +1249,14 @@ public class MainPage : ContentPage
         headerGrid.Add(new Label
         {
             Text = "CALCULATED WARMUP SCHEDULE",
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 12 : 13
         }, 0, 0);
 
         var countLbl = new Label
         {
-            TextColor = Color.FromArgb("#E2E8F0"),
+            TextColor = AppThemeManager.Color("#E2E8F0"),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 11 : 12
         };
@@ -1221,7 +1278,7 @@ public class MainPage : ContentPage
             },
             ColumnSpacing = compact ? 4 : 6,
             Padding = compact ? new Thickness(7, 4) : new Thickness(9, 5),
-            BackgroundColor = Color.FromArgb("#0F172A")
+            BackgroundColor = AppThemeManager.Color("#0F172A")
         };
         colHeader.Add(CreateTableHeaderLabel("#"), 0, 0);
         colHeader.Add(CreateTableHeaderLabel("STEP"), 1, 0);
@@ -1238,8 +1295,8 @@ public class MainPage : ContentPage
         {
             var rowBorder = new Border
             {
-                BackgroundColor = Color.FromArgb("#0F172A"),
-                Stroke = Color.FromArgb("#1E293B"),
+                BackgroundColor = AppThemeManager.Color("#0F172A"),
+                Stroke = AppThemeManager.Color("#1E293B"),
                 StrokeThickness = 1,
                 StrokeShape = new RoundRectangle { CornerRadius = 6 },
                 Padding = compact ? new Thickness(6, 4) : new Thickness(8, 5)
@@ -1261,7 +1318,7 @@ public class MainPage : ContentPage
 
             var orderLbl = new Label
             {
-                TextColor = Color.FromArgb("#64748B"),
+                TextColor = AppThemeManager.Color("#64748B"),
                 FontSize = compact ? 11 : 12,
                 VerticalTextAlignment = TextAlignment.Center
             };
@@ -1270,7 +1327,7 @@ public class MainPage : ContentPage
             var actionStack = new VerticalStackLayout { Spacing = 1, VerticalOptions = LayoutOptions.Center };
             var actionLbl = new Label
             {
-                TextColor = Color.FromArgb("#F8FAFC"),
+                TextColor = AppThemeManager.Color("#F8FAFC"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = compact ? 12 : 13,
                 LineBreakMode = LineBreakMode.TailTruncation,
@@ -1280,7 +1337,7 @@ public class MainPage : ContentPage
 
             var reverseLbl = new Label
             {
-                TextColor = Color.FromArgb("#64748B"),
+                TextColor = AppThemeManager.Color("#64748B"),
                 FontSize = compact ? 9.5 : 10,
                 LineBreakMode = LineBreakMode.TailTruncation,
                 MaxLines = 1
@@ -1291,7 +1348,7 @@ public class MainPage : ContentPage
 
             var weightLbl = new Label
             {
-                TextColor = Color.FromArgb("#FACC15"),
+                TextColor = AppThemeManager.Color("#FACC15"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = compact ? 11.5 : 13,
                 VerticalTextAlignment = TextAlignment.Center
@@ -1313,7 +1370,7 @@ public class MainPage : ContentPage
 
             var lengthLbl = new Label
             {
-                TextColor = Color.FromArgb("#38BDF8"),
+                TextColor = AppThemeManager.Color("#38BDF8"),
                 FontSize = compact ? 11 : 12,
                 VerticalTextAlignment = TextAlignment.Center
             };
@@ -1321,7 +1378,7 @@ public class MainPage : ContentPage
 
             var totalLbl = new Label
             {
-                TextColor = Color.FromArgb("#94A3B8"),
+                TextColor = AppThemeManager.Color("#94A3B8"),
                 FontSize = compact ? 11 : 12,
                 VerticalTextAlignment = TextAlignment.Center
             };
@@ -1371,14 +1428,14 @@ public class MainPage : ContentPage
         stack.Add(new Label
         {
             Text = "WARMUP EXTRAS (PRE-BARBELL MOBILITY / PREP)",
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 12 : 13
         });
 
         // Column Header Bar
         var headerBar = CreateAlignedRuleGrid(compact, padding: new Thickness(compact ? 6 : 10, 5));
-        headerBar.BackgroundColor = Color.FromArgb("#0F172A");
+        headerBar.BackgroundColor = AppThemeManager.Color("#0F172A");
         headerBar.Add(CreateTableHeaderLabel("STEP / ACTION"), 0, 0);
         headerBar.Add(CreateTableHeaderLabel(compact ? "DURATION" : "DURATION (SEC)"), 1, 0);
         var actHdr = CreateTableHeaderLabel("ACTIONS");
@@ -1392,9 +1449,9 @@ public class MainPage : ContentPage
         var actionEntry = new Entry
         {
             Placeholder = compact ? "Action (e.g. Roll)" : "Action (e.g. Foam Roll)",
-            PlaceholderColor = Color.FromArgb("#64748B"),
-            TextColor = Colors.White,
-            BackgroundColor = Color.FromArgb("#0F172A"),
+            PlaceholderColor = AppThemeManager.Color("#64748B"),
+            TextColor = AppThemeManager.Color("#F8FAFC"),
+            BackgroundColor = AppThemeManager.EntryBackground,
             FontSize = compact ? 12 : 13,
             HeightRequest = 38,
             VerticalOptions = LayoutOptions.Center
@@ -1416,10 +1473,10 @@ public class MainPage : ContentPage
         var secEntry = new Entry
         {
             Placeholder = "Sec",
-            PlaceholderColor = Color.FromArgb("#64748B"),
+            PlaceholderColor = AppThemeManager.Color("#64748B"),
             Keyboard = Keyboard.Numeric,
-            TextColor = Colors.White,
-            BackgroundColor = Color.FromArgb("#0F172A"),
+            TextColor = AppThemeManager.Color("#F8FAFC"),
+            BackgroundColor = AppThemeManager.EntryBackground,
             FontSize = compact ? 12 : 13,
             HeightRequest = 38,
             VerticalOptions = LayoutOptions.Center
@@ -1428,7 +1485,7 @@ public class MainPage : ContentPage
 
         var previewLbl = new Label
         {
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 11 : 12,
             HorizontalTextAlignment = TextAlignment.End,
@@ -1468,8 +1525,8 @@ public class MainPage : ContentPage
         {
             var rowBorder = new Border
             {
-                BackgroundColor = Color.FromArgb("#0F172A"),
-                Stroke = Color.FromArgb("#1E293B"),
+                BackgroundColor = AppThemeManager.Color("#0F172A"),
+                Stroke = AppThemeManager.Color("#1E293B"),
                 StrokeThickness = 1,
                 StrokeShape = new RoundRectangle { CornerRadius = 6 },
                 Padding = new Thickness(compact ? 6 : 10, 4),
@@ -1491,7 +1548,7 @@ public class MainPage : ContentPage
 
             var orderLbl = new Label
             {
-                TextColor = Color.FromArgb("#64748B"),
+                TextColor = AppThemeManager.Color("#64748B"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = 12,
                 VerticalTextAlignment = TextAlignment.Center
@@ -1500,7 +1557,7 @@ public class MainPage : ContentPage
 
             var nameLbl = new Label
             {
-                TextColor = Color.FromArgb("#F8FAFC"),
+                TextColor = AppThemeManager.Color("#F8FAFC"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = compact ? 12 : 13,
                 VerticalTextAlignment = TextAlignment.Center,
@@ -1522,7 +1579,7 @@ public class MainPage : ContentPage
 
             var timeLbl = new Label
             {
-                TextColor = Color.FromArgb("#38BDF8"),
+                TextColor = AppThemeManager.Color("#38BDF8"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = compact ? 12 : 13,
                 VerticalTextAlignment = TextAlignment.Center
@@ -1581,14 +1638,14 @@ public class MainPage : ContentPage
         stack.Add(new Label
         {
             Text = "WEIGHT JUMPS TABLE (FROM WEIGHT → +JUMP KG)",
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 12 : 13
         });
 
         // Column Header Bar
         var headerBar = CreateAlignedRuleGrid(compact, padding: new Thickness(compact ? 6 : 10, 5));
-        headerBar.BackgroundColor = Color.FromArgb("#0F172A");
+        headerBar.BackgroundColor = AppThemeManager.Color("#0F172A");
         headerBar.Add(CreateTableHeaderLabel("FROM WEIGHT"), 0, 0);
         headerBar.Add(CreateTableHeaderLabel("WEIGHT JUMP"), 1, 0);
         var actHdr = CreateTableHeaderLabel("ACTION");
@@ -1602,10 +1659,10 @@ public class MainPage : ContentPage
         var fromEntry = new Entry
         {
             Placeholder = compact ? $"From (1–{Defaults.MaxOpenerWeight}kg)" : $"From Weight (1–{Defaults.MaxOpenerWeight} kg)",
-            PlaceholderColor = Color.FromArgb("#64748B"),
+            PlaceholderColor = AppThemeManager.Color("#64748B"),
             Keyboard = Keyboard.Numeric,
-            TextColor = Colors.White,
-            BackgroundColor = Color.FromArgb("#0F172A"),
+            TextColor = AppThemeManager.Color("#F8FAFC"),
+            BackgroundColor = AppThemeManager.EntryBackground,
             FontSize = compact ? 12 : 13,
             HeightRequest = 38,
             VerticalOptions = LayoutOptions.Center
@@ -1615,10 +1672,10 @@ public class MainPage : ContentPage
         var jumpEntry = new Entry
         {
             Placeholder = "Jump (+kg)",
-            PlaceholderColor = Color.FromArgb("#64748B"),
+            PlaceholderColor = AppThemeManager.Color("#64748B"),
             Keyboard = Keyboard.Numeric,
-            TextColor = Colors.White,
-            BackgroundColor = Color.FromArgb("#0F172A"),
+            TextColor = AppThemeManager.Color("#F8FAFC"),
+            BackgroundColor = AppThemeManager.EntryBackground,
             FontSize = compact ? 12 : 13,
             HeightRequest = 38,
             VerticalOptions = LayoutOptions.Center
@@ -1652,8 +1709,8 @@ public class MainPage : ContentPage
         {
             var rowBorder = new Border
             {
-                BackgroundColor = Color.FromArgb("#0F172A"),
-                Stroke = Color.FromArgb("#1E293B"),
+                BackgroundColor = AppThemeManager.Color("#0F172A"),
+                Stroke = AppThemeManager.Color("#1E293B"),
                 StrokeThickness = 1,
                 StrokeShape = new RoundRectangle { CornerRadius = 6 },
                 Padding = new Thickness(compact ? 6 : 10, 4),
@@ -1664,7 +1721,7 @@ public class MainPage : ContentPage
 
             var fromLbl = new Label
             {
-                TextColor = Color.FromArgb("#F8FAFC"),
+                TextColor = AppThemeManager.Color("#F8FAFC"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = compact ? 12 : 13,
                 VerticalTextAlignment = TextAlignment.Center
@@ -1681,7 +1738,7 @@ public class MainPage : ContentPage
 
             var jumpLbl = new Label
             {
-                TextColor = Color.FromArgb("#FACC15"),
+                TextColor = AppThemeManager.Color("#FACC15"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = compact ? 12 : 13,
                 VerticalTextAlignment = TextAlignment.Center
@@ -1706,7 +1763,7 @@ public class MainPage : ContentPage
             var baseBadge = new Label
             {
                 Text = "BASE",
-                TextColor = Color.FromArgb("#64748B"),
+                TextColor = AppThemeManager.Color("#64748B"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = 10,
                 VerticalTextAlignment = TextAlignment.Center,
@@ -1749,14 +1806,14 @@ public class MainPage : ContentPage
         stack.Add(new Label
         {
             Text = "WARMUP REST / INTERVAL TIMES (FROM WEIGHT → SEC)",
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 12 : 13
         });
 
         // Column Header Bar
         var headerBar = CreateAlignedRuleGrid(compact, padding: new Thickness(compact ? 6 : 10, 5));
-        headerBar.BackgroundColor = Color.FromArgb("#0F172A");
+        headerBar.BackgroundColor = AppThemeManager.Color("#0F172A");
         headerBar.Add(CreateTableHeaderLabel("FROM WEIGHT"), 0, 0);
         headerBar.Add(CreateTableHeaderLabel("REST INTERVAL"), 1, 0);
         var actHdr = CreateTableHeaderLabel("ACTION");
@@ -1770,10 +1827,10 @@ public class MainPage : ContentPage
         var fromEntry = new Entry
         {
             Placeholder = compact ? $"From (1–{Defaults.MaxOpenerWeight}kg)" : $"From Weight (1–{Defaults.MaxOpenerWeight} kg)",
-            PlaceholderColor = Color.FromArgb("#64748B"),
+            PlaceholderColor = AppThemeManager.Color("#64748B"),
             Keyboard = Keyboard.Numeric,
-            TextColor = Colors.White,
-            BackgroundColor = Color.FromArgb("#0F172A"),
+            TextColor = AppThemeManager.Color("#F8FAFC"),
+            BackgroundColor = AppThemeManager.EntryBackground,
             FontSize = compact ? 12 : 13,
             HeightRequest = 38,
             VerticalOptions = LayoutOptions.Center
@@ -1795,10 +1852,10 @@ public class MainPage : ContentPage
         var secEntry = new Entry
         {
             Placeholder = "Sec",
-            PlaceholderColor = Color.FromArgb("#64748B"),
+            PlaceholderColor = AppThemeManager.Color("#64748B"),
             Keyboard = Keyboard.Numeric,
-            TextColor = Colors.White,
-            BackgroundColor = Color.FromArgb("#0F172A"),
+            TextColor = AppThemeManager.Color("#F8FAFC"),
+            BackgroundColor = AppThemeManager.EntryBackground,
             FontSize = compact ? 12 : 13,
             HeightRequest = 38,
             VerticalOptions = LayoutOptions.Center
@@ -1807,7 +1864,7 @@ public class MainPage : ContentPage
 
         var previewLbl = new Label
         {
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 11 : 12,
             HorizontalTextAlignment = TextAlignment.End,
@@ -1846,8 +1903,8 @@ public class MainPage : ContentPage
         {
             var rowBorder = new Border
             {
-                BackgroundColor = Color.FromArgb("#0F172A"),
-                Stroke = Color.FromArgb("#1E293B"),
+                BackgroundColor = AppThemeManager.Color("#0F172A"),
+                Stroke = AppThemeManager.Color("#1E293B"),
                 StrokeThickness = 1,
                 StrokeShape = new RoundRectangle { CornerRadius = 6 },
                 Padding = new Thickness(compact ? 6 : 10, 4),
@@ -1858,7 +1915,7 @@ public class MainPage : ContentPage
 
             var fromLbl = new Label
             {
-                TextColor = Color.FromArgb("#F8FAFC"),
+                TextColor = AppThemeManager.Color("#F8FAFC"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = compact ? 12 : 13,
                 VerticalTextAlignment = TextAlignment.Center
@@ -1875,7 +1932,7 @@ public class MainPage : ContentPage
 
             var timeLbl = new Label
             {
-                TextColor = Color.FromArgb("#38BDF8"),
+                TextColor = AppThemeManager.Color("#38BDF8"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = compact ? 12 : 13,
                 VerticalTextAlignment = TextAlignment.Center
@@ -1900,7 +1957,7 @@ public class MainPage : ContentPage
             var baseBadge = new Label
             {
                 Text = "BASE",
-                TextColor = Color.FromArgb("#64748B"),
+                TextColor = AppThemeManager.Color("#64748B"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = 10,
                 VerticalTextAlignment = TextAlignment.Center,
@@ -2018,14 +2075,14 @@ public class MainPage : ContentPage
             startRow.Add(new Label
             {
                 Text = "Time till comp start:",
-                TextColor = Color.FromArgb("#94A3B8"),
+                TextColor = AppThemeManager.Color("#94A3B8"),
                 FontSize = compact ? 11 : 12,
                 VerticalTextAlignment = TextAlignment.Center
             }, 0, 0);
 
             var startValLbl = new Label
             {
-                TextColor = Color.FromArgb("#38BDF8"),
+                TextColor = AppThemeManager.Color("#38BDF8"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = compact ? 12 : 13,
                 VerticalTextAlignment = TextAlignment.Center
@@ -2053,8 +2110,8 @@ public class MainPage : ContentPage
             // Pre-Snatch Presentation & Clock Timer
             var snBreakBorder = new Border
             {
-                BackgroundColor = Color.FromArgb("#0F172A"),
-                Stroke = Color.FromArgb("#334155"),
+                BackgroundColor = AppThemeManager.Color("#0F172A"),
+                Stroke = AppThemeManager.Color("#334155"),
                 StrokeThickness = 1,
                 StrokeShape = new RoundRectangle { CornerRadius = 8 },
                 Padding = compact ? new Thickness(8, 3) : new Thickness(8, 6)
@@ -2073,7 +2130,7 @@ public class MainPage : ContentPage
             var snBreakTitleLbl = new Label
             {
                 Text = "Presentation & Pre-Snatch Clock (tap bar or time to adjust):",
-                TextColor = Color.FromArgb("#94A3B8"),
+                TextColor = AppThemeManager.Color("#94A3B8"),
                 FontSize = compact ? 11 : 12,
                 VerticalTextAlignment = TextAlignment.Center,
                 MaxLines = 1,
@@ -2088,10 +2145,10 @@ public class MainPage : ContentPage
 
             var snBreakTimeBtn = new Button
             {
-                BackgroundColor = Color.FromArgb("#1E293B"),
-                BorderColor = Color.FromArgb("#EAB308"),
+                BackgroundColor = AppThemeManager.Color("#1E293B"),
+                BorderColor = AppThemeManager.Color("#EAB308"),
                 BorderWidth = 1,
-                TextColor = Color.FromArgb("#FACC15"),
+                TextColor = AppThemeManager.Color("#FACC15"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = compact ? 11 : 12,
                 CornerRadius = 6,
@@ -2133,14 +2190,14 @@ public class MainPage : ContentPage
                 snBreakCollapsedRow.Add(new Label
                 {
                     Text = "✓ Presentation & Clock: Complete",
-                    TextColor = Color.FromArgb("#94A3B8"),
+                    TextColor = AppThemeManager.Color("#94A3B8"),
                     FontSize = 11,
                     VerticalTextAlignment = TextAlignment.Center
                 }, 0, 0);
                 snBreakCollapsedRow.Add(new Label
                 {
                     Text = "▾ Expand",
-                    TextColor = Color.FromArgb("#38BDF8"),
+                    TextColor = AppThemeManager.Color("#38BDF8"),
                     FontAttributes = FontAttributes.Bold,
                     FontSize = 11,
                     VerticalTextAlignment = TextAlignment.Center
@@ -2164,8 +2221,8 @@ public class MainPage : ContentPage
             // Phase 1: Snatch Attempts Remaining
             var snatchPhaseBorder = new Border
             {
-                BackgroundColor = Color.FromArgb("#0F172A"),
-                Stroke = Color.FromArgb("#334155"),
+                BackgroundColor = AppThemeManager.Color("#0F172A"),
+                Stroke = AppThemeManager.Color("#334155"),
                 StrokeThickness = 1,
                 StrokeShape = new RoundRectangle { CornerRadius = 8 },
                 Padding = compact ? new Thickness(8, 3) : new Thickness(8, 6)
@@ -2188,7 +2245,7 @@ public class MainPage : ContentPage
             var snatchTitleLbl = new Label
             {
                 Text = "1. Snatch Attempts Left:",
-                TextColor = Color.FromArgb("#94A3B8"),
+                TextColor = AppThemeManager.Color("#94A3B8"),
                 FontSize = compact ? 11 : 12,
                 VerticalTextAlignment = TextAlignment.Center,
                 MaxLines = 1,
@@ -2205,7 +2262,7 @@ public class MainPage : ContentPage
 
             var snCountLbl = new Label
             {
-                TextColor = Color.FromArgb("#F8FAFC"),
+                TextColor = AppThemeManager.Color("#F8FAFC"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = compact ? 13 : 14,
                 WidthRequest = compact ? 24 : 30,
@@ -2262,14 +2319,14 @@ public class MainPage : ContentPage
                 snatchCollapsedRow.Add(new Label
                 {
                     Text = "✓ 1. Snatch Left: Complete",
-                    TextColor = Color.FromArgb("#94A3B8"),
+                    TextColor = AppThemeManager.Color("#94A3B8"),
                     FontSize = 11,
                     VerticalTextAlignment = TextAlignment.Center
                 }, 0, 0);
                 snatchCollapsedRow.Add(new Label
                 {
                     Text = "▾ Expand",
-                    TextColor = Color.FromArgb("#38BDF8"),
+                    TextColor = AppThemeManager.Color("#38BDF8"),
                     FontAttributes = FontAttributes.Bold,
                     FontSize = 11,
                     VerticalTextAlignment = TextAlignment.Center
@@ -2289,8 +2346,8 @@ public class MainPage : ContentPage
             // Phase 2: Break After Snatch
             var breakPhaseBorder = new Border
             {
-                BackgroundColor = Color.FromArgb("#0F172A"),
-                Stroke = Color.FromArgb("#334155"),
+                BackgroundColor = AppThemeManager.Color("#0F172A"),
+                Stroke = AppThemeManager.Color("#334155"),
                 StrokeThickness = 1,
                 StrokeShape = new RoundRectangle { CornerRadius = 8 },
                 Padding = compact ? new Thickness(8, 3) : new Thickness(8, 6)
@@ -2309,7 +2366,7 @@ public class MainPage : ContentPage
             var breakTitleLbl = new Label
             {
                 Text = "2. Break After Snatch (tap bar or time to adjust):",
-                TextColor = Color.FromArgb("#94A3B8"),
+                TextColor = AppThemeManager.Color("#94A3B8"),
                 FontSize = compact ? 11 : 12,
                 VerticalTextAlignment = TextAlignment.Center,
                 MaxLines = 1,
@@ -2324,10 +2381,10 @@ public class MainPage : ContentPage
 
             var breakTimeBtn = new Button
             {
-                BackgroundColor = Color.FromArgb("#1E293B"),
-                BorderColor = Color.FromArgb("#EAB308"),
+                BackgroundColor = AppThemeManager.Color("#1E293B"),
+                BorderColor = AppThemeManager.Color("#EAB308"),
                 BorderWidth = 1,
-                TextColor = Color.FromArgb("#FACC15"),
+                TextColor = AppThemeManager.Color("#FACC15"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = compact ? 11 : 12,
                 CornerRadius = 6,
@@ -2369,14 +2426,14 @@ public class MainPage : ContentPage
                 breakCollapsedRow.Add(new Label
                 {
                     Text = "✓ 2. Break: Complete",
-                    TextColor = Color.FromArgb("#94A3B8"),
+                    TextColor = AppThemeManager.Color("#94A3B8"),
                     FontSize = 11,
                     VerticalTextAlignment = TextAlignment.Center
                 }, 0, 0);
                 breakCollapsedRow.Add(new Label
                 {
                     Text = "▾ Expand",
-                    TextColor = Color.FromArgb("#38BDF8"),
+                    TextColor = AppThemeManager.Color("#38BDF8"),
                     FontAttributes = FontAttributes.Bold,
                     FontSize = 11,
                     VerticalTextAlignment = TextAlignment.Center
@@ -2397,8 +2454,8 @@ public class MainPage : ContentPage
         // Row 3: Primary Stage Lift Progress Bar + Lifts Out / Lifts Passed + Big ADVANCE: NEXT LIFT Button
         var stageBorder = new Border
         {
-            BackgroundColor = Color.FromArgb("#0F172A"),
-            Stroke = Color.FromArgb("#475569"),
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            Stroke = AppThemeManager.Color("#475569"),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 8 },
             Padding = compact ? new Thickness(8, 6) : new Thickness(10, 8)
@@ -2422,7 +2479,7 @@ public class MainPage : ContentPage
         liftsOutRow.Add(new Label
         {
             Text = "Lifts Out:",
-            TextColor = Color.FromArgb("#E2E8F0"),
+            TextColor = AppThemeManager.Color("#E2E8F0"),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 12 : 13,
             VerticalTextAlignment = TextAlignment.Center
@@ -2432,10 +2489,10 @@ public class MainPage : ContentPage
 
         var liftsOutValueBtn = new Button
         {
-            BackgroundColor = Color.FromArgb("#1E293B"),
-            BorderColor = Color.FromArgb("#38BDF8"),
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
+            BorderColor = AppThemeManager.Color("#38BDF8"),
             BorderWidth = 1,
-            TextColor = Color.FromArgb("#FACC15"),
+            TextColor = AppThemeManager.Color("#FACC15"),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 14 : 15,
             CornerRadius = 6,
@@ -2451,7 +2508,7 @@ public class MainPage : ContentPage
 
         var passedLbl = new Label
         {
-            TextColor = Color.FromArgb("#94A3B8"),
+            TextColor = AppThemeManager.Color("#94A3B8"),
             FontSize = compact ? 11 : 12,
             HorizontalTextAlignment = TextAlignment.End,
             VerticalTextAlignment = TextAlignment.Center
@@ -2519,8 +2576,8 @@ public class MainPage : ContentPage
         {
             Text = "↺ Reset",
             Command = _vm.ResetLiveSessionCommand,
-            BackgroundColor = Color.FromArgb("#334155"),
-            TextColor = Color.FromArgb("#E2E8F0"),
+            BackgroundColor = AppThemeManager.NeutralButtonBackground,
+            TextColor = AppThemeManager.NeutralButtonText,
             FontSize = compact ? 11 : 12,
             CornerRadius = 6,
             Padding = new Thickness(compact ? 8 : 10, 0),
@@ -2530,7 +2587,7 @@ public class MainPage : ContentPage
         var autoAdvLabel = new Label
         {
             Text = compact ? "Auto-Adv" : "Auto-Advance (Training)",
-            TextColor = Color.FromArgb("#94A3B8"),
+            TextColor = AppThemeManager.Color("#94A3B8"),
             FontSize = 11,
             HorizontalTextAlignment = TextAlignment.End,
             VerticalTextAlignment = TextAlignment.Center,
@@ -2574,7 +2631,7 @@ public class MainPage : ContentPage
             Text = compact
                 ? $"LIVE {_vm.CurrentLiftTitle} PROGRESSION"
                 : $"LIVE {_vm.CurrentLiftTitle} WARMUP PROGRESSION (ACTIVE STEP HIGHLIGHTED IN YELLOW)",
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 11 : 12,
             MaxLines = 1,
@@ -2712,7 +2769,8 @@ public class MainPage : ContentPage
             System.ComponentModel.PropertyChangedEventHandler? vmItemHandler = null;
             vmItemHandler = (_, e) =>
             {
-                if (e.PropertyName == nameof(LiveStepItemViewModel.Status))
+                if (e.PropertyName is nameof(LiveStepItemViewModel.Status)
+                    or nameof(LiveStepItemViewModel.RowBackgroundHex))
                 {
                     ApplyRowColors(subscribedVmItem);
                 }
@@ -2873,7 +2931,7 @@ public class MainPage : ContentPage
         _vm.MarkWelcomeHelpSeen();
         if (Navigation.ModalStack.Count == 0)
         {
-            await Navigation.PushModalAsync(new HelpAboutModalPage(startOnAboutTab: false), animated: true);
+            await Navigation.PushModalAsync(new HelpAboutModalPage(startOnAboutTab: false, onSelectTheme: pref => _vm.SetThemePreference(pref)), animated: true);
         }
     }
 
@@ -3168,8 +3226,8 @@ public class MainPage : ContentPage
 
         var dialogBorder = new Border
         {
-            BackgroundColor = Color.FromArgb("#1E293B"),
-            Stroke = Color.FromArgb("#38BDF8"),
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
+            Stroke = AppThemeManager.Color("#38BDF8"),
             StrokeThickness = 1.5,
             StrokeShape = new RoundRectangle { CornerRadius = 12 },
             Padding = new Thickness(16, 14),
@@ -3185,7 +3243,7 @@ public class MainPage : ContentPage
         dialogStack.Add(new Label
         {
             Text = title,
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 15
         });
@@ -3193,15 +3251,15 @@ public class MainPage : ContentPage
         dialogStack.Add(new Label
         {
             Text = message,
-            TextColor = Color.FromArgb("#CBD5E1"),
+            TextColor = AppThemeManager.Color("#CBD5E1"),
             FontSize = 12.5,
             LineHeight = 1.15
         });
 
         var entryBorder = new Border
         {
-            BackgroundColor = Color.FromArgb("#0F172A"),
-            Stroke = Color.FromArgb("#475569"),
+            BackgroundColor = AppThemeManager.EntryBackground,
+            Stroke = AppThemeManager.Color("#475569"),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 8 },
             Padding = new Thickness(8, 2)
@@ -3211,7 +3269,7 @@ public class MainPage : ContentPage
         {
             Text = initialValue ?? string.Empty,
             Keyboard = keyboard ?? Keyboard.Default,
-            TextColor = Colors.White,
+            TextColor = AppThemeManager.Color("#F8FAFC"),
             BackgroundColor = Colors.Transparent,
             FontAttributes = FontAttributes.Bold,
             FontSize = 15,
@@ -3240,8 +3298,8 @@ public class MainPage : ContentPage
         var cancelBtn = new Button
         {
             Text = cancel,
-            BackgroundColor = Color.FromArgb("#334155"),
-            TextColor = Color.FromArgb("#E2E8F0"),
+            BackgroundColor = AppThemeManager.NeutralButtonBackground,
+            TextColor = AppThemeManager.NeutralButtonText,
             FontAttributes = FontAttributes.Bold,
             FontSize = 13,
             CornerRadius = 8,
@@ -3316,8 +3374,8 @@ public class MainPage : ContentPage
 
         var dialogBorder = new Border
         {
-            BackgroundColor = Color.FromArgb("#1E293B"),
-            Stroke = Color.FromArgb(accentHex),
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
+            Stroke = AppThemeManager.Color(accentHex),
             StrokeThickness = 1.5,
             StrokeShape = new RoundRectangle { CornerRadius = 12 },
             Padding = new Thickness(16, 14),
@@ -3333,7 +3391,7 @@ public class MainPage : ContentPage
         dialogStack.Add(new Label
         {
             Text = title,
-            TextColor = Color.FromArgb(accentHex),
+            TextColor = AppThemeManager.Color(accentHex),
             FontAttributes = FontAttributes.Bold,
             FontSize = 15.5
         });
@@ -3341,7 +3399,7 @@ public class MainPage : ContentPage
         dialogStack.Add(new Label
         {
             Text = message,
-            TextColor = Color.FromArgb("#E2E8F0"),
+            TextColor = AppThemeManager.Color("#E2E8F0"),
             FontSize = 13,
             LineHeight = 1.2
         });
@@ -3360,8 +3418,8 @@ public class MainPage : ContentPage
         var cancelBtn = new Button
         {
             Text = cancel,
-            BackgroundColor = Color.FromArgb("#334155"),
-            TextColor = Color.FromArgb("#F8FAFC"),
+            BackgroundColor = AppThemeManager.NeutralButtonBackground,
+            TextColor = AppThemeManager.NeutralButtonText,
             FontAttributes = FontAttributes.Bold,
             FontSize = 13,
             CornerRadius = 8,
@@ -3447,8 +3505,8 @@ public class MainPage : ContentPage
 
         var border = new Border
         {
-            BackgroundColor = Color.FromArgb("#1E293B"),
-            Stroke = Color.FromArgb("#334155"),
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
+            Stroke = AppThemeManager.Color("#334155"),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 6 },
             Padding = new Thickness(compact ? 6 : 8, 5),
@@ -3471,8 +3529,8 @@ public class MainPage : ContentPage
     {
         return new Border
         {
-            BackgroundColor = Color.FromArgb("#1E293B"),
-            Stroke = Color.FromArgb("#334155"),
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
+            Stroke = AppThemeManager.Color("#334155"),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 10 },
             Padding = padding ?? new Thickness(12, 10)
@@ -3496,10 +3554,10 @@ public class MainPage : ContentPage
 
     private static void StyleSegmentButton(Button btn, bool isActive, string activeBgHex, string activeBorderHex)
     {
-        btn.BackgroundColor = Color.FromArgb(isActive ? activeBgHex : "#0F172A");
-        btn.BorderColor = Color.FromArgb(isActive ? activeBorderHex : "#334155");
+        btn.BackgroundColor = isActive ? Color.FromArgb(activeBgHex) : AppThemeManager.Color("#0F172A");
+        btn.BorderColor = isActive ? Color.FromArgb(activeBorderHex) : AppThemeManager.Color("#334155");
         btn.BorderWidth = isActive ? 1.5 : 1;
-        btn.TextColor = Color.FromArgb(isActive ? "#FFFFFF" : "#94A3B8");
+        btn.TextColor = isActive ? Colors.White : AppThemeManager.Color("#94A3B8");
     }
 
     private static View CreateFieldLabel(string title, string subtitle)
@@ -3513,14 +3571,14 @@ public class MainPage : ContentPage
                 new Label
                 {
                     Text = title,
-                    TextColor = Color.FromArgb("#F8FAFC"),
+                    TextColor = AppThemeManager.Color("#F8FAFC"),
                     FontAttributes = FontAttributes.Bold,
                     FontSize = 13
                 },
                 new Label
                 {
                     Text = subtitle,
-                    TextColor = Color.FromArgb("#64748B"),
+                    TextColor = AppThemeManager.Color("#64748B"),
                     FontSize = 11
                 }
             }
@@ -3534,8 +3592,8 @@ public class MainPage : ContentPage
             Text = label,
             Command = command,
             CommandParameter = deltaParam,
-            BackgroundColor = Color.FromArgb("#334155"),
-            TextColor = Colors.White,
+            BackgroundColor = AppThemeManager.NeutralButtonBackground,
+            TextColor = AppThemeManager.NeutralButtonText,
             FontAttributes = FontAttributes.Bold,
             FontSize = 13,
             CornerRadius = 6,
@@ -3576,10 +3634,10 @@ public class MainPage : ContentPage
 
         var valBtn = new Button
         {
-            BackgroundColor = Color.FromArgb("#0F172A"),
-            BorderColor = Color.FromArgb("#475569"),
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            BorderColor = AppThemeManager.Color("#475569"),
             BorderWidth = 1,
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 12 : 13,
             CornerRadius = 6,
@@ -3600,7 +3658,7 @@ public class MainPage : ContentPage
         return new Label
         {
             Text = text,
-            TextColor = Color.FromArgb("#94A3B8"),
+            TextColor = AppThemeManager.Color("#94A3B8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 11
         };
@@ -3608,12 +3666,15 @@ public class MainPage : ContentPage
 
     private static Button CreateIconActionButton(string symbol, string bgHex, System.Windows.Input.ICommand command, double width = 32)
     {
+        bool isNeutral = string.Equals(bgHex, "#334155", StringComparison.OrdinalIgnoreCase);
         var btn = new Button
         {
             Text = symbol,
             Command = command,
-            BackgroundColor = Color.FromArgb(bgHex),
-            TextColor = Colors.White,
+            BackgroundColor = isNeutral
+                ? AppThemeManager.NeutralButtonBackground
+                : Color.FromArgb(AppThemeManager.IsLightTheme && string.Equals(bgHex, "#7F1D1D", StringComparison.OrdinalIgnoreCase) ? "#DC2626" : bgHex),
+            TextColor = isNeutral ? AppThemeManager.NeutralButtonText : Colors.White,
             FontSize = 11,
             CornerRadius = 6,
             WidthRequest = width,
@@ -3628,8 +3689,8 @@ public class MainPage : ContentPage
     {
         var border = new Border
         {
-            BackgroundColor = Color.FromArgb("#0F172A"),
-            Stroke = Color.FromArgb("#334155"),
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            Stroke = AppThemeManager.Color("#334155"),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 8 },
             Padding = compact ? new Thickness(4, 4) : new Thickness(8, 6)
@@ -3644,7 +3705,7 @@ public class MainPage : ContentPage
         stack.Add(new Label
         {
             Text = labelText,
-            TextColor = Color.FromArgb("#94A3B8"),
+            TextColor = AppThemeManager.Color("#94A3B8"),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 9 : 10,
             HorizontalTextAlignment = TextAlignment.Center,
@@ -3654,7 +3715,7 @@ public class MainPage : ContentPage
 
         var valLbl = new Label
         {
-            TextColor = Color.FromArgb(valueColorHex),
+            TextColor = AppThemeManager.Color(valueColorHex),
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 12 : 15,
             HorizontalTextAlignment = TextAlignment.Center,

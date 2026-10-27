@@ -32,6 +32,14 @@ public class MainActivity : MauiAppCompatActivity
     {
         base.OnResume();
         AndroidFloatingTimerOverlay.Shared.Hide();
+        AppThemeManager.RefreshFromSystemTheme();
+        AppThemeManager.UpdatePlatformStatusBar();
+    }
+
+    public override void OnConfigurationChanged(Configuration newConfig)
+    {
+        base.OnConfigurationChanged(newConfig);
+        AppThemeManager.RefreshFromSystemTheme();
     }
 }
 #endif
