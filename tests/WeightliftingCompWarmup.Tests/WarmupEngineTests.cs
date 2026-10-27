@@ -325,4 +325,24 @@ public class WarmupEngineTests
         Assert.Equal(latest, iosLatest);
         Assert.True(parsedLatest > new Version(2, 0, 0));
     }
+
+    [Fact]
+    public void SourceAndDocumentationFiles_ContainNoUtf8Mojibake()
+    {
+        string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        string[] filesToCheck =
+        [
+            Path.Combine(repoRoot, "README.md"),
+            Path.Combine(repoRoot, "src", "WeightliftingCompWarmup.Maui", "Views", "HelpAboutModalPage.cs"),
+            Path.Combine(repoRoot, "src", "WeightliftingCompWarmup.Maui", "Views", "MainPage.cs")
+        ];
+
+        foreach (string path in filesToCheck)
+        {
+            string content = File.ReadAllText(path, System.Text.Encoding.UTF8);
+            Assert.DoesNotContain("Ã", content);
+            Assert.DoesNotContain("â€”", content);
+            Assert.DoesNotContain("ðŸ", content);
+        }
+    }
 }

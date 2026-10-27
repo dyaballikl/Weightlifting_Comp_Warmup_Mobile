@@ -18,8 +18,10 @@ New-Item -ItemType Directory -Force -Path $AndroidOutDir | Out-Null
 New-Item -ItemType Directory -Force -Path $PlayStoreOutDir | Out-Null
 New-Item -ItemType Directory -Force -Path $IosOutDir | Out-Null
 
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
 # Read and optionally auto-increment version in WeightliftingCompWarmup.Maui.csproj
-$CsprojContent = Get-Content -Path $MauiProject -Raw
+$CsprojContent = [System.IO.File]::ReadAllText($MauiProject, [System.Text.Encoding]::UTF8)
 $DisplayMatch = [regex]::Match($CsprojContent, '<ApplicationDisplayVersion>(\d+)\.(\d+)\.(\d+)</ApplicationDisplayVersion>')
 $CodeMatch = [regex]::Match($CsprojContent, '<ApplicationVersion>(\d+)</ApplicationVersion>')
 
@@ -48,40 +50,40 @@ if (-not $NoVersionBump) {
         '<ApplicationVersion>\d+</ApplicationVersion>',
         "<ApplicationVersion>$VersionCode</ApplicationVersion>")
 
-    Set-Content -Path $MauiProject -Value $CsprojContent -NoNewline -Encoding UTF8
+    [System.IO.File]::WriteAllText($MauiProject, $CsprojContent, $Utf8NoBom)
 
     # Keep HelpAboutModalPage.cs, README.md, and STORE_LISTING.md synchronized with the bumped version
     $HelpAboutFile = Join-Path $ProjectRoot "src\WeightliftingCompWarmup.Maui\Views\HelpAboutModalPage.cs"
     if (Test-Path $HelpAboutFile) {
-        $HelpContent = Get-Content -Path $HelpAboutFile -Raw
+        $HelpContent = [System.IO.File]::ReadAllText($HelpAboutFile, [System.Text.Encoding]::UTF8)
         $HelpContent = [regex]::Replace($HelpContent, 'public const string AppVersion = "[^"]+";', "public const string AppVersion = `"$DisplayVersion`";")
         $HelpContent = [regex]::Replace($HelpContent, 'public const string AppBuild = "[^"]+";', "public const string AppBuild = `"$VersionCode`";")
-        Set-Content -Path $HelpAboutFile -Value $HelpContent -NoNewline -Encoding UTF8
+        [System.IO.File]::WriteAllText($HelpAboutFile, $HelpContent, $Utf8NoBom)
     }
 
     $ReadmeFile = Join-Path $ProjectRoot "README.md"
     if (Test-Path $ReadmeFile) {
-        $ReadmeContent = Get-Content -Path $ReadmeFile -Raw
+        $ReadmeContent = [System.IO.File]::ReadAllText($ReadmeFile, [System.Text.Encoding]::UTF8)
         $ReadmeContent = [regex]::Replace($ReadmeContent, 'version-\d+\.\d+\.\d+%20\(build%20\d+\)', "version-$DisplayVersion%20(build%20$VersionCode)")
         $ReadmeContent = [regex]::Replace($ReadmeContent, '\*\*Current Release:\*\* `v\d+\.\d+\.\d+` \(Build `\d+`\)', "**Current Release:** ``v$DisplayVersion`` (Build ``$VersionCode``)")
-        Set-Content -Path $ReadmeFile -Value $ReadmeContent -NoNewline -Encoding UTF8
+        [System.IO.File]::WriteAllText($ReadmeFile, $ReadmeContent, $Utf8NoBom)
     }
 
     $StoreListingFile = Join-Path $PlayStoreOutDir "STORE_LISTING.md"
     if (Test-Path $StoreListingFile) {
-        $ListingContent = Get-Content -Path $StoreListingFile -Raw
+        $ListingContent = [System.IO.File]::ReadAllText($StoreListingFile, [System.Text.Encoding]::UTF8)
         $ListingContent = [regex]::Replace($ListingContent, 'WeightliftingCompWarmup-\d+\.\d+\.\d+-Signed\.aab', "WeightliftingCompWarmup-$DisplayVersion-Signed.aab")
-        Set-Content -Path $StoreListingFile -Value $ListingContent -NoNewline -Encoding UTF8
+        [System.IO.File]::WriteAllText($StoreListingFile, $ListingContent, $Utf8NoBom)
     }
 
     $VersionJsonFile = Join-Path $ProjectRoot "version.json"
     if (Test-Path $VersionJsonFile) {
-        $VersionJsonContent = Get-Content -Path $VersionJsonFile -Raw
+        $VersionJsonContent = [System.IO.File]::ReadAllText($VersionJsonFile, [System.Text.Encoding]::UTF8)
         $VersionJsonContent = [regex]::Replace($VersionJsonContent, '"latestVersion":\s*"[^"]+"', "`"latestVersion`": `"$DisplayVersion`"")
         $VersionJsonContent = [regex]::Replace($VersionJsonContent, '"latestBuild":\s*\d+', "`"latestBuild`": $VersionCode")
         $VersionJsonContent = [regex]::Replace($VersionJsonContent, '"androidLatestVersion":\s*"[^"]+"', "`"androidLatestVersion`": `"$DisplayVersion`"")
         $VersionJsonContent = [regex]::Replace($VersionJsonContent, '"iosLatestVersion":\s*"[^"]+"', "`"iosLatestVersion`": `"$DisplayVersion`"")
-        Set-Content -Path $VersionJsonFile -Value $VersionJsonContent -NoNewline -Encoding UTF8
+        [System.IO.File]::WriteAllText($VersionJsonFile, $VersionJsonContent, $Utf8NoBom)
     }
 
     Write-Host "=== Bumped Version: $OldDisplayVersion (build $OldVersionCode) -> $DisplayVersion (build $VersionCode) ===" -ForegroundColor Magenta
