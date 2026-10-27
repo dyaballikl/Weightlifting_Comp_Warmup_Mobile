@@ -443,7 +443,7 @@ public class MainPage : ContentPage
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 12 : 13,
             CornerRadius = 8,
-            Padding = compact ? new Thickness(8, 2) : new Thickness(12, 6),
+            Padding = compact ? new Thickness(5, 2) : new Thickness(12, 6),
             HeightRequest = compact ? 34 : 40,
             HorizontalOptions = compact ? LayoutOptions.Fill : LayoutOptions.Start
         };
@@ -3512,6 +3512,11 @@ public class MainPage : ContentPage
             LineBreakMode = LineBreakMode.TailTruncation
         };
         valLbl.SetBinding(Label.TextProperty, valueBindingPath);
+        return FinishLiveMetricChip(border, stack, valLbl);
+    }
+
+    private static View FinishLiveMetricChip(Border border, VerticalStackLayout stack, Label valLbl)
+    {
         stack.Add(valLbl);
 
         border.Content = stack;

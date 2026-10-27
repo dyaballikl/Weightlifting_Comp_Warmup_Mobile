@@ -30,7 +30,7 @@ Enter your lifter's **Snatch** or **Clean & Jerk** opener, barbell type, weight-
 ### 📱 Phone Layout (Portrait)
 | Snatch Setup & Opener | Warmup Schedule & Plates | Snatch LIVE Countdown | Clean & Jerk 3-Phase LIVE |
 | :---: | :---: | :---: | :---: |
-| <img src="docs/screenshots/01-phone-snatch-setup.png" alt="Snatch Setup & 110kg Opener" width="200" /> | <img src="docs/screenshots/02-phone-warmup-schedule.png" alt="Warmup Schedule & IWF Plate Sleeves" width="200" /> | <img src="docs/screenshots/04-phone-snatch-live.png" alt="Snatch LIVE Countdown" width="200" /> | <img src="docs/screenshots/05-phone-cj-live-3phase.png" alt="Clean & Jerk 3-Phase LIVE" width="200" /> |
+| <img src="docs/screenshots/01-phone-snatch-setup.png" alt="Snatch Setup & 95kg Opener" width="200" /> | <img src="docs/screenshots/02-phone-warmup-schedule.png" alt="Warmup Schedule & IWF Plate Sleeves" width="200" /> | <img src="docs/screenshots/04-phone-snatch-live.png" alt="Snatch LIVE Countdown" width="200" /> | <img src="docs/screenshots/05-phone-cj-live-3phase.png" alt="Clean & Jerk 3-Phase LIVE" width="200" /> |
 
 | Jumps, Times & Extras | About & Ko-fi Support |
 | :---: | :---: |
