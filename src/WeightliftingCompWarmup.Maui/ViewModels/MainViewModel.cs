@@ -1789,6 +1789,11 @@ public class MainViewModel : INotifyPropertyChanged
             LiveActiveStepProgress = 0.0;
         }
 
+        _platformService.UpdateLiveMiniTimerFrame(
+            LiveActiveStepDescription,
+            LiveActiveStepRemaining,
+            LiveActiveStepProgress);
+
         if (snapshot.TriggerBeep)
         {
             _platformService.PlayStepTransitionBeep();

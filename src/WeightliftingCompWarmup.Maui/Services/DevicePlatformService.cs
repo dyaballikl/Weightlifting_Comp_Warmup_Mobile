@@ -45,6 +45,37 @@ public class DevicePlatformService
         {
             // Ignore when MainThread is unavailable in unit tests
         }
+#elif IOS
+        try
+        {
+            MainThread.BeginInvokeOnMainThread(() => Platforms.iOS.IosPipMiniTimerManager.Shared.SetEnabled(enabled));
+        }
+        catch
+        {
+            // Ignore when MainThread is unavailable in unit tests
+        }
+#endif
+    }
+
+    /// <summary>
+    /// Updates the rendered frame for the iOS Picture-in-Picture floating mini-timer.
+    /// </summary>
+    public void UpdateLiveMiniTimerFrame(string stepDescription, string remainingText, double progress)
+    {
+#if IOS
+        if (!IsLiveMiniTimerActive)
+        {
+            return;
+        }
+
+        try
+        {
+            Platforms.iOS.IosPipMiniTimerManager.Shared.UpdateFrame(stepDescription, remainingText, progress);
+        }
+        catch
+        {
+            // Ignore in headless/unit test environments
+        }
 #endif
     }
 

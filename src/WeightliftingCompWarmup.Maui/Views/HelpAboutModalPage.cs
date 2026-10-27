@@ -20,13 +20,13 @@ public class HelpAboutModalPage : ContentPage
 
     public const string AppShortName = "Comp OWL";
     public const string AppFullName = "Weightlifting Comp Warmup";
-    public const string AppVersion = "2.0.17";
-    public const string AppBuild = "19";
+    public const string AppVersion = "2.0.18";
+    public const string AppBuild = "20";
     public const string AppleAppStoreId = ""; // Populate with numeric App Store Connect ID once created
 
     public HelpAboutModalPage(bool startOnAboutTab = false)
     {
-        Title = $"{AppShortName} Ã¢â‚¬â€ Help & About";
+        Title = $"{AppShortName} ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Help & About";
         BackgroundColor = Color.FromArgb("#0B1120");
         NavigationPage.SetHasNavigationBar(this, false);
 
@@ -74,7 +74,7 @@ public class HelpAboutModalPage : ContentPage
         };
         titleStack.Add(new Label
         {
-            Text = "Ã°Å¸Â¦â€° Comp OWL Ã¢â‚¬â€ Olympic Weightlifting Warmup",
+            Text = "ÃƒÂ°Ã…Â¸Ã‚Â¦Ã¢â‚¬Â° Comp OWL ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Olympic Weightlifting Warmup",
             TextColor = Color.FromArgb("#F8FAFC"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 15
@@ -88,7 +88,7 @@ public class HelpAboutModalPage : ContentPage
 
         var closeBtn = new Button
         {
-            Text = "Ã¢Å“â€¢",
+            Text = "ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¢",
             BackgroundColor = Color.FromArgb("#0F172A"),
             BorderColor = Color.FromArgb("#475569"),
             BorderWidth = 1,
@@ -120,7 +120,7 @@ public class HelpAboutModalPage : ContentPage
 
         _helpTabBtn = new Button
         {
-            Text = "Ã°Å¸â€œâ€“ HOW TO USE (HELP)",
+            Text = "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã¢â‚¬â€œ HOW TO USE (HELP)",
             FontAttributes = FontAttributes.Bold,
             FontSize = 12,
             CornerRadius = 8,
@@ -130,7 +130,7 @@ public class HelpAboutModalPage : ContentPage
 
         _aboutTabBtn = new Button
         {
-            Text = "Ã°Å¸Â¦â€° ABOUT COMP OWL",
+            Text = "ÃƒÂ°Ã…Â¸Ã‚Â¦Ã¢â‚¬Â° ABOUT COMP OWL",
             FontAttributes = FontAttributes.Bold,
             FontSize = 12,
             CornerRadius = 8,
@@ -147,7 +147,7 @@ public class HelpAboutModalPage : ContentPage
         // 4. Footer "Got It" Button
         var footerBtn = new Button
         {
-            Text = "GOT IT Ã¢â‚¬â€ BACK TO WARMUP",
+            Text = "GOT IT ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â BACK TO WARMUP",
             BackgroundColor = Color.FromArgb("#0284C7"),
             BorderColor = Color.FromArgb("#38BDF8"),
             BorderWidth = 1,
@@ -201,56 +201,56 @@ public class HelpAboutModalPage : ContentPage
             badgeText: "WHAT IS COMP OWL FOR?",
             badgeColorHex: "#38BDF8",
             title: "Know Exactly When to Lift What in the Warmup Room",
-            body: "Comp OWL (Competition Olympic WeightLifting) helps athletes managing their own warmups Ã¢â‚¬â€ or coaches and handlers managing warmups for another lifter Ã¢â‚¬â€ time every warmup attempt so the athlete is ready at the exact moment they are called to the competition platform for their opener."));
+            body: "Comp OWL (Competition Olympic WeightLifting) helps athletes managing their own warmups ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â or coaches and handlers managing warmups for another lifter ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â time every warmup attempt so the athlete is ready at the exact moment they are called to the competition platform for their opener."));
 
-        // Card 2: Step 1 Ã¢â‚¬â€ Profiles & Bar Setup
+        // Card 2: Step 1 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Profiles & Bar Setup
         stack.Add(CreateStepCard(
             stepNumber: "1",
             stepTitle: "Choose a Lifter Profile & Bar Weight",
             bullets: new[]
             {
-                "Tap the Ã°Å¸â€˜Â¤ Profile button (top-left) to switch lifters, create a new blank profile, duplicate an existing profile, or rename/delete profiles.",
-                "Tap the Ã°Å¸Ââ€¹Ã¯Â¸Â Bar button (top-right) to set the barbell weight (20 kg Men's bar, 15 kg Women's bar, or custom youth/technique bar).",
-                "Tap Ã°Å¸â€â€ Beep to toggle audio alerts when it is time for your next warmup lift."
+                "Tap the ÃƒÂ°Ã…Â¸Ã¢â‚¬ËœÃ‚Â¤ Profile button (top-left) to switch lifters, create a new blank profile, duplicate an existing profile, or rename/delete profiles.",
+                "Tap the ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬Â¹ÃƒÂ¯Ã‚Â¸Ã‚Â Bar button (top-right) to set the barbell weight (20 kg Men's bar, 15 kg Women's bar, or custom youth/technique bar).",
+                "Tap ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬Â Beep to toggle audio alerts when it is time for your next warmup lift."
             }));
 
-        // Card 3: Step 2 Ã¢â‚¬â€ Configure Snatch or Clean & Jerk Setup
+        // Card 3: Step 2 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Configure Snatch or Clean & Jerk Setup
         stack.Add(CreateStepCard(
             stepNumber: "2",
-            stepTitle: "Set Opener, Lifts Out & Warmup Rules (Ã¢Å¡â„¢Ã¯Â¸Â SETUP)",
+            stepTitle: "Set Opener, Lifts Out & Warmup Rules (ÃƒÂ¢Ã…Â¡Ã¢â€žÂ¢ÃƒÂ¯Ã‚Â¸Ã‚Â SETUP)",
             bullets: new[]
             {
-                "Select SNATCH or CLEAN & JERK in the top bar while in Ã¢Å¡â„¢Ã¯Â¸Â SETUP mode.",
+                "Select SNATCH or CLEAN & JERK in the top bar while in ÃƒÂ¢Ã…Â¡Ã¢â€žÂ¢ÃƒÂ¯Ã‚Â¸Ã‚Â SETUP mode.",
                 "Opener Weight: Your planned first competition attempt on the platform. The barbell diagram shows exact IWF plate loading (including 2.5 kg competition collars on openers, and full-size plastic 5 kg white / 2.5 kg red plates below the 10 kg green plate minimum).",
                 "Lifts Out & Stage Lift Time: How many platform attempts are scheduled before your opener. Every attempt ahead of you adds 'Stage lift time' (defaults to 55s for Snatch and 62s for Clean & Jerk) to your available warmup time.",
                 "Extra Time After Last Warmup: Buffer between your final warmup lift and walking out for your platform opener (defaults to 60s; 75s in the Clean & Jerk Demo Profile).",
                 "Rules & Extras: Customize weight jump thresholds (e.g., larger jumps on light weights, smaller jumps near your opener), rest time between warmup sets, and pre-lifting steps (like foam rolling or general mobility). Comp OWL automatically smooths your final 3 warmup jumps."
             }));
 
-        // Card 4: Step 3 Ã¢â‚¬â€ Pre-Stage Timers (Presentation & Break)
+        // Card 4: Step 3 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Pre-Stage Timers (Presentation & Break)
         stack.Add(CreateStepCard(
             stepNumber: "3",
             stepTitle: "Presentation Clock & Mid-Meet Break",
             bullets: new[]
             {
-                "Snatch Ã¢â‚¬â€ Presentation & Clock (min): Accounts for athlete line-up, walk-out, introduction, and the standard 10-minute clock after presentation (defaults to 14 min total). Set to 0 if stage lifting is already underway.",
-                "Clean & Jerk Ã¢â‚¬â€ Snatch Remaining & Break: Tracks the remaining Snatch attempts on stage plus the intermission break (usually 10 min) between Snatch and Clean & Jerk so you can start warming up for C&J during the break or late in the Snatch session.",
+                "Snatch ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Presentation & Clock (min): Accounts for athlete line-up, walk-out, introduction, and the standard 10-minute clock after presentation (defaults to 14 min total). Set to 0 if stage lifting is already underway.",
+                "Clean & Jerk ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Snatch Remaining & Break: Tracks the remaining Snatch attempts on stage plus the intermission break (usually 10 min) between Snatch and Clean & Jerk so you can start warming up for C&J during the break or late in the Snatch session.",
                 "On phone screens, once 'Snatch Left' and 'Break' are completed in C&J Live, they automatically collapse upward to keep your active C&J warmup schedule front and center (tap a collapsed bar anytime to expand it)."
             }));
 
-        // Card 5: Step 4 Ã¢â‚¬â€ Running a Live Session
+        // Card 5: Step 4 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Running a Live Session
         stack.Add(CreateStepCard(
             stepNumber: "4",
-            stepTitle: "Run the Warmup in Ã°Å¸â€Â´ LIVE Mode",
+            stepTitle: "Run the Warmup in ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â´ LIVE Mode",
             bullets: new[]
             {
-                "Tap Ã°Å¸â€Â´ LIVE to start the session clock. Your device screen will stay awake automatically while the live timer is running.",
+                "Tap ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â´ LIVE to start the session clock. Your device screen will stay awake automatically while the live timer is running.",
                 "Before platform lifting begins, tap 'ADVANCE TO STAGE LIFTING' as soon as the first lifter is called to the bar.",
-                "During platform lifting, tap 'Ã¢ÂÂ­Ã¯Â¸Â ADVANCE: NEXT STAGE LIFT' each time a platform attempt finishes, or tap the Lifts Out badge directly to type a new count if the marshaling board changes.",
+                "During platform lifting, tap 'ÃƒÂ¢Ã‚ÂÃ‚Â­ÃƒÂ¯Ã‚Â¸Ã‚Â ADVANCE: NEXT STAGE LIFT' each time a platform attempt finishes, or tap the Lifts Out badge directly to type a new count if the marshaling board changes.",
                 "Watch the highlighted row in your Warmup Schedule: 'ACTIVE NOW' shows the bar weight you should be lifting right now, and 'UP NEXT' counts down the exact time until your next warmup set."
             }));
 
-        // Card 6 (Bottom): Important Callout Ã¢â‚¬â€ Manual Stage Tracking vs Training Mode
+        // Card 6 (Bottom): Important Callout ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Manual Stage Tracking vs Training Mode
         var scoreboardCard = new Border
         {
             BackgroundColor = Color.FromArgb("#1E1B4B"),
@@ -262,7 +262,7 @@ public class HelpAboutModalPage : ContentPage
         var scoreboardStack = new VerticalStackLayout { Spacing = 6 };
         scoreboardStack.Add(new Label
         {
-            Text = "Ã¢Å¡Â Ã¯Â¸Â NO AUTOMATIC SCOREBOARD LINK",
+            Text = "ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â NO AUTOMATIC SCOREBOARD LINK",
             TextColor = Color.FromArgb("#FBBF24"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 12
@@ -282,14 +282,14 @@ public class HelpAboutModalPage : ContentPage
         });
         scoreboardStack.Add(new Label
         {
-            Text = "Ã¢ÂÂ±Ã¯Â¸Â TRAINING / PRACTICE COMPETITION MODE (AUTO-ADVANCE)",
+            Text = "ÃƒÂ¢Ã‚ÂÃ‚Â±ÃƒÂ¯Ã‚Â¸Ã‚Â TRAINING / PRACTICE COMPETITION MODE (AUTO-ADVANCE)",
             TextColor = Color.FromArgb("#4ADE80"),
             FontAttributes = FontAttributes.Bold,
             FontSize = 11.5
         });
         scoreboardStack.Add(new Label
         {
-            Text = "In the Live screen, you can check 'Auto-advance when stage lift timer hits 0s'. This automatically ticks off a stage lift each time the stage clock expires Ã¢â‚¬â€ perfect for solo training sessions or running a realistic practice competition 1Ã¢â‚¬â€œ2 weeks out from meet day!",
+            Text = "In the Live screen, you can check 'Auto-advance when stage lift timer hits 0s'. This automatically ticks off a stage lift each time the stage clock expires ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â perfect for solo training sessions or running a realistic practice competition 1ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“2 weeks out from meet day!",
             TextColor = Color.FromArgb("#E2E8F0"),
             FontSize = 12,
             LineHeight = 1.2
@@ -326,7 +326,7 @@ public class HelpAboutModalPage : ContentPage
 
         heroStack.Add(new Label
         {
-            Text = "Ã°Å¸Â¦â€°Ã°Å¸Ââ€¹Ã¯Â¸Â",
+            Text = "ÃƒÂ°Ã…Â¸Ã‚Â¦Ã¢â‚¬Â°ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬Â¹ÃƒÂ¯Ã‚Â¸Ã‚Â",
             FontSize = 36,
             HorizontalTextAlignment = TextAlignment.Center
         });
@@ -351,7 +351,7 @@ public class HelpAboutModalPage : ContentPage
 
         heroStack.Add(new Label
         {
-            Text = $"Version {AppVersion} (Build {AppBuild}) Ã¢â‚¬Â¢ Android & iOS",
+            Text = $"Version {AppVersion} (Build {AppBuild}) ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Android & iOS",
             TextColor = Color.FromArgb("#94A3B8"),
             FontSize = 12,
             HorizontalTextAlignment = TextAlignment.Center
@@ -387,7 +387,7 @@ public class HelpAboutModalPage : ContentPage
         });
         supportStack.Add(new Label
         {
-            Text = "Comp OWL is free, open-source, and built for the weightlifting community Ã¢â‚¬â€ I'm not looking to profit from this app. However, maintaining developer account licenses costs me around $150/year. If Comp OWL helps you or your lifters on competition day, an optional contribution on Ko-fi to help cover annual license maintenance is hugely appreciated!",
+            Text = "Comp OWL is free, open-source, and built for the weightlifting community ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â I'm not looking to profit from this app. However, maintaining developer account licenses costs me around $150/year. If Comp OWL helps you or your lifters on competition day, an optional contribution on Ko-fi to help cover annual license maintenance is hugely appreciated!",
             TextColor = Color.FromArgb("#CBD5E1"),
             FontSize = 12.5,
             LineHeight = 1.2
@@ -395,7 +395,7 @@ public class HelpAboutModalPage : ContentPage
 
         var kofiBtn = new Button
         {
-            Text = "Ã¢Ëœâ€¢ Support Comp OWL on Ko-fi",
+            Text = "ÃƒÂ¢Ã‹Å“Ã¢â‚¬Â¢ Support Comp OWL on Ko-fi",
             BackgroundColor = Color.FromArgb("#0284C7"),
             BorderColor = Color.FromArgb("#38BDF8"),
             BorderWidth = 1,
@@ -440,10 +440,10 @@ public class HelpAboutModalPage : ContentPage
                 : "store";
 
         string rateButtonText = isIosEnv
-            ? "â­ Rate Comp OWL on the App Store"
+            ? "Ã¢Â­Â Rate Comp OWL on the App Store"
             : isAndroidEnv
-                ? "â­ Rate Comp OWL on Google Play"
-                : "â­ Star Comp OWL on GitHub";
+                ? "Ã¢Â­Â Rate Comp OWL on Google Play"
+                : "Ã¢Â­Â Star Comp OWL on GitHub";
 
         var rateBorder = new Border
         {
@@ -501,7 +501,7 @@ public class HelpAboutModalPage : ContentPage
             badgeText: "THE NAME",
             badgeColorHex: "#38BDF8",
             title: "Why \"Comp OWL\"?",
-            body: "Comp OWL stands for Competition Olympic WeightLifting Ã¢â‚¬â€ a short, competition-ready name designed to fit cleanly in your phone's app drawer while keeping your warmup timing sharp and wise in the back room."));
+            body: "Comp OWL stands for Competition Olympic WeightLifting ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â a short, competition-ready name designed to fit cleanly in your phone's app drawer while keeping your warmup timing sharp and wise in the back room."));
 
         // Offline & Privacy
         stack.Add(CreateInfoCard(
@@ -568,7 +568,7 @@ public class HelpAboutModalPage : ContentPage
         licenseStack.Add(creatorLabel);
         licenseStack.Add(new Label
         {
-            Text = "GNU General Public License v3.0 (GPL-3.0) Ã¢â‚¬Â¢ Based on the original Windows desktop Weightlifting_Comp_Warmup application. Free and open-source software distributed under the terms of the GPL-3.0 license.",
+            Text = "GNU General Public License v3.0 (GPL-3.0) ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Based on the original Windows desktop Weightlifting_Comp_Warmup application. Free and open-source software distributed under the terms of the GPL-3.0 license.",
             TextColor = Color.FromArgb("#CBD5E1"),
             FontSize = 12,
             LineHeight = 1.2
@@ -587,7 +587,7 @@ public class HelpAboutModalPage : ContentPage
 
         var mobileRepoBtn = new Button
         {
-            Text = "Ã°Å¸Å’Â Mobile GitHub Repo",
+            Text = "ÃƒÂ°Ã…Â¸Ã…â€™Ã‚Â Mobile GitHub Repo",
             BackgroundColor = Color.FromArgb("#0F172A"),
             BorderColor = Color.FromArgb("#475569"),
             BorderWidth = 1,
@@ -611,7 +611,7 @@ public class HelpAboutModalPage : ContentPage
 
         var desktopRepoBtn = new Button
         {
-            Text = "Ã°Å¸â€™Â» Desktop GitHub Repo",
+            Text = "ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â» Desktop GitHub Repo",
             BackgroundColor = Color.FromArgb("#0F172A"),
             BorderColor = Color.FromArgb("#475569"),
             BorderWidth = 1,
@@ -751,7 +751,7 @@ public class HelpAboutModalPage : ContentPage
 
             bulletGrid.Add(new Label
             {
-                Text = "Ã¢â‚¬Â¢",
+                Text = "ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢",
                 TextColor = Color.FromArgb("#38BDF8"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = 13,
@@ -809,7 +809,9 @@ public class HelpAboutModalPage : ContentPage
 
                 if (windowScene != null)
                 {
+#pragma warning disable CA1422
                     StoreKit.SKStoreReviewController.RequestReview(windowScene);
+#pragma warning restore CA1422
                     requestedNativeReview = true;
                 }
             }

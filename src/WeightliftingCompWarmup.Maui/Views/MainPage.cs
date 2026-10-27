@@ -174,6 +174,7 @@ public class MainPage : ContentPage
     private void OnPipModeChanged(bool isInPip)
     {
         _isInPipMode = isInPip;
+#if ANDROID
         if (isInPip)
         {
             if (_promptOverlayHost.IsVisible && _activePromptTcs != null)
@@ -193,6 +194,12 @@ public class MainPage : ContentPage
                 ScrollActiveStepIntoViewIfNeeded(animated: false);
             }
         }
+#else
+        if (!isInPip && _vm.IsLiveMode)
+        {
+            ScrollActiveStepIntoViewIfNeeded(animated: false);
+        }
+#endif
     }
 
     protected override bool OnBackButtonPressed()
