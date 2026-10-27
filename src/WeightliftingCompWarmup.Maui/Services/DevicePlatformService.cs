@@ -30,6 +30,81 @@ public class DevicePlatformService
     public static event Action<bool>? PipModeChanged;
 
     /// <summary>
+    /// Returns <c>true</c> only when the app was installed from the Google Play Store on Android
+    /// or the Apple App Store on iOS. Returns <c>false</c> for sideloaded APKs, simulators, or desktop builds.
+    /// </summary>
+    public static bool IsInstalledFromAppStore()
+    {
+#if ANDROID
+        try
+        {
+            var context = Android.App.Application.Context;
+            var pm = context?.PackageManager;
+            string? packageName = context?.PackageName;
+            if (pm == null || string.IsNullOrWhiteSpace(packageName))
+            {
+                return false;
+            }
+
+            string? installer = null;
+            if (OperatingSystem.IsAndroidVersionAtLeast(30))
+            {
+                var sourceInfo = pm.GetInstallSourceInfo(packageName);
+                installer = sourceInfo?.InstallingPackageName ?? sourceInfo?.InitiatingPackageName;
+            }
+            else
+            {
+#pragma warning disable CS0618, CA1422
+                installer = pm.GetInstallerPackageName(packageName);
+#pragma warning restore CS0618, CA1422
+            }
+
+            return string.Equals(installer, "com.android.vending", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(installer, "com.google.android.feedback", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+#elif IOS
+        try
+        {
+            if (ObjCRuntime.Runtime.Arch == ObjCRuntime.Arch.SIMULATOR)
+            {
+                return false;
+            }
+
+            // Sideloaded, development, and ad-hoc iOS builds include an embedded.mobileprovision file; App Store builds do not.
+            string? provisionPath = Foundation.NSBundle.MainBundle.PathForResource("embedded", "mobileprovision");
+            if (!string.IsNullOrEmpty(provisionPath))
+            {
+                return false;
+            }
+
+            var receiptUrl = Foundation.NSBundle.MainBundle.AppStoreReceiptUrl;
+            string? receiptPath = receiptUrl?.Path;
+            if (string.IsNullOrWhiteSpace(receiptPath))
+            {
+                return false;
+            }
+
+            if (receiptPath.EndsWith("sandboxReceipt", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return Foundation.NSFileManager.DefaultManager.FileExists(receiptPath);
+        }
+        catch
+        {
+            return false;
+        }
+#else
+        return false;
+#endif
+    }
+
+    /// <summary>
     /// Enables or disables the automatic floating mini-timer (Picture-in-Picture overlay)
     /// when the user navigates to the home screen while a Live warmup timer is running.
     /// </summary>

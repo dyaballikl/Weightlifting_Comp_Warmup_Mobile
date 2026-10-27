@@ -20,8 +20,8 @@ public class HelpAboutModalPage : ContentPage
 
     public const string AppShortName = "Comp OWL";
     public const string AppFullName = "Weightlifting Comp Warmup";
-    public const string AppVersion = "2.0.20";
-    public const string AppBuild = "22";
+    public const string AppVersion = "2.0.21";
+    public const string AppBuild = "23";
     public const string AppleAppStoreId = ""; // Populate with numeric App Store Connect ID once created
 
     public HelpAboutModalPage(bool startOnAboutTab = false)
@@ -422,79 +422,76 @@ public class HelpAboutModalPage : ContentPage
         supportBorder.Content = supportStack;
         stack.Add(supportBorder);
 
-        // Environment-Specific Store Rating Card
+        // Store Rating Card (shown only when installed from Google Play Store or Apple App Store)
         bool isIosEnv = DeviceInfo.Current.Platform == DevicePlatform.iOS ||
                         DeviceInfo.Current.Platform == DevicePlatform.MacCatalyst;
         bool isAndroidEnv = DeviceInfo.Current.Platform == DevicePlatform.Android;
 
-        string storeBadgeText = isIosEnv
-            ? "RATE ON THE APP STORE"
-            : isAndroidEnv
-                ? "RATE ON GOOGLE PLAY"
-                : "RATE & REVIEW";
-
-        string storeNameText = isIosEnv
-            ? "Apple App Store"
-            : isAndroidEnv
-                ? "Google Play Store"
-                : "store";
-
-        string rateButtonText = isIosEnv
-            ? "⭐ Rate Comp OWL on the App Store"
-            : isAndroidEnv
-                ? "⭐ Rate Comp OWL on Google Play"
-                : "⭐ Star Comp OWL on GitHub";
-
-        var rateBorder = new Border
+        if ((isIosEnv || isAndroidEnv) && Services.DevicePlatformService.IsInstalledFromAppStore())
         {
-            BackgroundColor = Color.FromArgb("#1E293B"),
-            Stroke = Color.FromArgb("#38BDF8"),
-            StrokeThickness = 1,
-            StrokeShape = new RoundRectangle { CornerRadius = 10 },
-            Padding = new Thickness(14, 12)
-        };
+            string storeBadgeText = isIosEnv
+                ? "RATE ON THE APP STORE"
+                : "RATE ON GOOGLE PLAY";
 
-        var rateStack = new VerticalStackLayout { Spacing = 6 };
-        rateStack.Add(new Label
-        {
-            Text = storeBadgeText,
-            TextColor = Color.FromArgb("#38BDF8"),
-            FontAttributes = FontAttributes.Bold,
-            FontSize = 11
-        });
-        rateStack.Add(new Label
-        {
-            Text = "Enjoying Comp OWL on Competition Day?",
-            TextColor = Color.FromArgb("#F8FAFC"),
-            FontAttributes = FontAttributes.Bold,
-            FontSize = 14
-        });
-        rateStack.Add(new Label
-        {
-            Text = $"Leaving a quick rating or review on the {storeNameText} helps other weightlifters, coaches, and handlers discover Comp OWL.",
-            TextColor = Color.FromArgb("#CBD5E1"),
-            FontSize = 12.5,
-            LineHeight = 1.2
-        });
+            string storeNameText = isIosEnv
+                ? "Apple App Store"
+                : "Google Play Store";
 
-        var rateBtn = new Button
-        {
-            Text = rateButtonText,
-            BackgroundColor = Color.FromArgb("#0F172A"),
-            BorderColor = Color.FromArgb("#38BDF8"),
-            BorderWidth = 1,
-            TextColor = Color.FromArgb("#FACC15"),
-            FontAttributes = FontAttributes.Bold,
-            FontSize = 12.5,
-            CornerRadius = 8,
-            HeightRequest = 38,
-            Margin = new Thickness(0, 4, 0, 0)
-        };
-        rateBtn.Clicked += async (_, _) => await OpenStoreRatingAsync();
-        rateStack.Add(rateBtn);
+            string rateButtonText = isIosEnv
+                ? "⭐ Rate Comp OWL on the App Store"
+                : "⭐ Rate Comp OWL on Google Play";
 
-        rateBorder.Content = rateStack;
-        stack.Add(rateBorder);
+            var rateBorder = new Border
+            {
+                BackgroundColor = Color.FromArgb("#1E293B"),
+                Stroke = Color.FromArgb("#38BDF8"),
+                StrokeThickness = 1,
+                StrokeShape = new RoundRectangle { CornerRadius = 10 },
+                Padding = new Thickness(14, 12)
+            };
+
+            var rateStack = new VerticalStackLayout { Spacing = 6 };
+            rateStack.Add(new Label
+            {
+                Text = storeBadgeText,
+                TextColor = Color.FromArgb("#38BDF8"),
+                FontAttributes = FontAttributes.Bold,
+                FontSize = 11
+            });
+            rateStack.Add(new Label
+            {
+                Text = "Enjoying Comp OWL on Competition Day?",
+                TextColor = Color.FromArgb("#F8FAFC"),
+                FontAttributes = FontAttributes.Bold,
+                FontSize = 14
+            });
+            rateStack.Add(new Label
+            {
+                Text = $"Leaving a quick rating or review on the {storeNameText} helps other weightlifters, coaches, and handlers discover Comp OWL.",
+                TextColor = Color.FromArgb("#CBD5E1"),
+                FontSize = 12.5,
+                LineHeight = 1.2
+            });
+
+            var rateBtn = new Button
+            {
+                Text = rateButtonText,
+                BackgroundColor = Color.FromArgb("#0F172A"),
+                BorderColor = Color.FromArgb("#38BDF8"),
+                BorderWidth = 1,
+                TextColor = Color.FromArgb("#FACC15"),
+                FontAttributes = FontAttributes.Bold,
+                FontSize = 12.5,
+                CornerRadius = 8,
+                HeightRequest = 38,
+                Margin = new Thickness(0, 4, 0, 0)
+            };
+            rateBtn.Clicked += async (_, _) => await OpenStoreRatingAsync();
+            rateStack.Add(rateBtn);
+
+            rateBorder.Content = rateStack;
+            stack.Add(rateBorder);
+        }
 
         // Why Comp OWL?
         stack.Add(CreateInfoCard(
@@ -834,10 +831,6 @@ public class HelpAboutModalPage : ContentPage
             if (DeviceInfo.Current.Platform == DevicePlatform.Android)
             {
                 await Launcher.Default.OpenAsync($"https://play.google.com/store/apps/details?id={packageId}");
-            }
-            else
-            {
-                await Launcher.Default.OpenAsync("https://github.com/dyaballikl/Weightlifting_Comp_Warmup_Mobile");
             }
 #endif
         }
