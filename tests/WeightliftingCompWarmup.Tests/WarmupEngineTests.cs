@@ -273,4 +273,35 @@ public class WarmupEngineTests
             }
         }
     }
+
+    [Fact]
+    public void WarmupCalculator_HandlesEditedLowestFromWeightAboveBarbellWeight()
+    {
+        var profile = Defaults.CreateDemoProfile();
+        // Edit the base jump rule from 1kg -> 25kg (above 20kg barbell)
+        int baseJump = profile.SnatchJumps[1];
+        profile.SnatchJumps.Remove(1);
+        profile.SnatchJumps[25] = baseJump;
+
+        // Edit the base time rule from 1kg -> 25kg (above 20kg barbell)
+        int baseTime = profile.SnatchTimes[1];
+        profile.SnatchTimes.Remove(1);
+        profile.SnatchTimes[25] = baseTime;
+
+        var weights = WarmupCalculator.CalculateWarmupWeights(
+            profile.BarbellWeight,
+            profile.SnatchOpenerWeight,
+            profile.SnatchOpenerInWarmup,
+            profile.SnatchJumps);
+
+        Assert.Equal([20, 40, 50, 55, 60, 65, 70, 75, 80, 82, 85], weights);
+
+        var steps = WarmupCalculator.BuildSteps(LiftType.Snatch, profile);
+        Assert.Equal(17, steps.Count);
+
+        var ruleBase = new WeightJumpRule(25, 20, isBaseRule: true);
+        Assert.False(ruleBase.CanDelete);
+        var ruleNonBase = new WeightJumpRule(40, 10, isBaseRule: false);
+        Assert.True(ruleNonBase.CanDelete);
+    }
 }

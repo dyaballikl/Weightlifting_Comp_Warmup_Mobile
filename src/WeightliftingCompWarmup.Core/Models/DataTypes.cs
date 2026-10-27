@@ -46,18 +46,20 @@ public class WeightJumpRule
 {
     public int FromWeight { get; set; }
     public int Jump { get; set; }
+    public bool IsBaseRule { get; set; }
 
     [JsonIgnore]
-    public bool CanDelete => FromWeight > 1;
+    public bool CanDelete => !IsBaseRule && FromWeight > 1;
 
     public WeightJumpRule()
     {
     }
 
-    public WeightJumpRule(int fromWeight, int jump)
+    public WeightJumpRule(int fromWeight, int jump, bool isBaseRule = false)
     {
         FromWeight = fromWeight;
         Jump = jump;
+        IsBaseRule = isBaseRule;
     }
 }
 
@@ -68,21 +70,23 @@ public class WarmupTimeRule
 {
     public int FromWeight { get; set; }
     public int Seconds { get; set; }
+    public bool IsBaseRule { get; set; }
 
     [JsonIgnore]
     public string FormattedTime => WarmupCalculator.FormatSeconds(Seconds);
 
     [JsonIgnore]
-    public bool CanDelete => FromWeight > 1;
+    public bool CanDelete => !IsBaseRule && FromWeight > 1;
 
     public WarmupTimeRule()
     {
     }
 
-    public WarmupTimeRule(int fromWeight, int seconds)
+    public WarmupTimeRule(int fromWeight, int seconds, bool isBaseRule = false)
     {
         FromWeight = fromWeight;
         Seconds = seconds;
+        IsBaseRule = isBaseRule;
     }
 }
 

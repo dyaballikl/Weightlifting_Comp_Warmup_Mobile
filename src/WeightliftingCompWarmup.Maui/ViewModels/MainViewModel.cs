@@ -734,6 +734,8 @@ public class MainViewModel : INotifyPropertyChanged
         private set { if (_liveCjBreakRemainingDisplay != value) { _liveCjBreakRemainingDisplay = value; OnPropertyChanged(); } }
     }
 
+    public int LiveCjBreakRemainingSeconds => _liveCjBreakRemainingSeconds;
+
     public double LiveCjBreakProgress
     {
         get => _liveCjBreakProgress;
@@ -976,16 +978,20 @@ public class MainViewModel : INotifyPropertyChanged
         ExtrasList = nextExtras;
 
         var nextJumps = new ObservableCollection<WeightJumpRule>();
+        int jumpIdx = 0;
         foreach (var kvp in activeJumps.OrderBy(k => k.Key))
         {
-            nextJumps.Add(new WeightJumpRule(kvp.Key, kvp.Value));
+            nextJumps.Add(new WeightJumpRule(kvp.Key, kvp.Value, isBaseRule: jumpIdx == 0));
+            jumpIdx++;
         }
         WeightJumpsList = nextJumps;
 
         var nextTimes = new ObservableCollection<WarmupTimeRule>();
+        int timeIdx = 0;
         foreach (var kvp in activeTimes.OrderBy(k => k.Key))
         {
-            nextTimes.Add(new WarmupTimeRule(kvp.Key, kvp.Value));
+            nextTimes.Add(new WarmupTimeRule(kvp.Key, kvp.Value, isBaseRule: timeIdx == 0));
+            timeIdx++;
         }
         WarmupTimesList = nextTimes;
     }
@@ -1164,6 +1170,149 @@ public class MainViewModel : INotifyPropertyChanged
         _storageService.Save();
         RefreshRuleCollections();
         RefreshSetupCalculations();
+    }
+
+    public void RenameExtra(ExtraItem? item, string? newAction)
+    {
+        if (item == null)
+        {
+            return;
+        }
+
+        string trimmed = (newAction ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            ShowBanner("Extra step description cannot be empty.");
+            return;
+        }
+
+        item.Action = trimmed;
+        _storageService.Save();
+        RefreshRuleCollections();
+        RefreshSetupCalculations();
+        ShowBanner($"Renamed extra step #{item.Order} to '{trimmed}'.");
+    }
+
+    public void UpdateExtraDuration(ExtraItem? item, int newSeconds)
+    {
+        if (item == null)
+        {
+            return;
+        }
+
+        if (newSeconds <= 0 || newSeconds > 7200)
+        {
+            ShowBanner("Extra duration must be between 1 and 7200 seconds.");
+            return;
+        }
+
+        item.Length = newSeconds;
+        _storageService.Save();
+        RefreshRuleCollections();
+        RefreshSetupCalculations();
+        ShowBanner($"Updated '{item.Action}' duration to {WarmupCalculator.FormatSeconds(newSeconds)}.");
+    }
+
+    public void UpdateWeightJumpFromWeight(WeightJumpRule? rule, int newFromWeight)
+    {
+        if (rule == null)
+        {
+            return;
+        }
+
+        if (newFromWeight < 1 || newFromWeight > Defaults.MaxOpenerWeight)
+        {
+            ShowBanner($"From Weight must be between 1 and {Defaults.MaxOpenerWeight} kg.");
+            return;
+        }
+
+        if (newFromWeight == rule.FromWeight)
+        {
+            return;
+        }
+
+        var targetJumps = IsSnatchSelected ? ActiveProfile.SnatchJumps : ActiveProfile.CjJumps;
+        int jumpKg = rule.Jump;
+        targetJumps.Remove(rule.FromWeight);
+        targetJumps[newFromWeight] = jumpKg;
+
+        _storageService.Save();
+        RefreshRuleCollections();
+        RefreshSetupCalculations();
+        ShowBanner($"Updated weight jump: From {newFromWeight}kg → +{jumpKg}kg.");
+    }
+
+    public void UpdateWeightJumpValue(WeightJumpRule? rule, int newJumpKg)
+    {
+        if (rule == null)
+        {
+            return;
+        }
+
+        if (newJumpKg < 1 || newJumpKg > 100)
+        {
+            ShowBanner("Jump size must be between 1 and 100 kg.");
+            return;
+        }
+
+        var targetJumps = IsSnatchSelected ? ActiveProfile.SnatchJumps : ActiveProfile.CjJumps;
+        targetJumps[rule.FromWeight] = newJumpKg;
+
+        _storageService.Save();
+        RefreshRuleCollections();
+        RefreshSetupCalculations();
+        ShowBanner($"Updated weight jump: From {rule.FromWeight}kg → +{newJumpKg}kg.");
+    }
+
+    public void UpdateWarmupTimeFromWeight(WarmupTimeRule? rule, int newFromWeight)
+    {
+        if (rule == null)
+        {
+            return;
+        }
+
+        if (newFromWeight < 1 || newFromWeight > Defaults.MaxOpenerWeight)
+        {
+            ShowBanner($"From Weight must be between 1 and {Defaults.MaxOpenerWeight} kg.");
+            return;
+        }
+
+        if (newFromWeight == rule.FromWeight)
+        {
+            return;
+        }
+
+        var targetTimes = IsSnatchSelected ? ActiveProfile.SnatchTimes : ActiveProfile.CjTimes;
+        int seconds = rule.Seconds;
+        targetTimes.Remove(rule.FromWeight);
+        targetTimes[newFromWeight] = seconds;
+
+        _storageService.Save();
+        RefreshRuleCollections();
+        RefreshSetupCalculations();
+        ShowBanner($"Updated warmup time: From {newFromWeight}kg → {WarmupCalculator.FormatSeconds(seconds)}.");
+    }
+
+    public void UpdateWarmupTimeSeconds(WarmupTimeRule? rule, int newSeconds)
+    {
+        if (rule == null)
+        {
+            return;
+        }
+
+        if (newSeconds < 5 || newSeconds > 3600)
+        {
+            ShowBanner("Warmup interval time must be between 5 and 3600 seconds.");
+            return;
+        }
+
+        var targetTimes = IsSnatchSelected ? ActiveProfile.SnatchTimes : ActiveProfile.CjTimes;
+        targetTimes[rule.FromWeight] = newSeconds;
+
+        _storageService.Save();
+        RefreshRuleCollections();
+        RefreshSetupCalculations();
+        ShowBanner($"Updated warmup time: From {rule.FromWeight}kg → {WarmupCalculator.FormatSeconds(newSeconds)}.");
     }
 
     // Profile CRUD Operations (invoked from Page dialogs / action sheets)

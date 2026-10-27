@@ -23,7 +23,10 @@ public class MainPage : ContentPage
     private bool _layoutInitialized;
     private bool _firstOpenHelpChecked;
 
+    private readonly Grid _pageRootHost;
     private readonly Grid _rootGrid;
+    private readonly Grid _promptOverlayHost;
+    private TaskCompletionSource<string?>? _activePromptTcs;
     private readonly ContentView _headerContainer;
     private readonly ContentView _bodyContainer;
     private readonly List<Layout> _activeBindableLayouts = new();
@@ -66,9 +69,31 @@ public class MainPage : ContentPage
         _rootGrid.Add(BuildStatusBanner(), 0, 1);
         _rootGrid.Add(_bodyContainer, 0, 2);
 
-        Content = _rootGrid;
+        _promptOverlayHost = new Grid
+        {
+            IsVisible = false,
+            BackgroundColor = Color.FromArgb("#B3020617"),
+            ZIndex = 100
+        };
+
+        _pageRootHost = new Grid();
+        _pageRootHost.Add(_rootGrid);
+        _pageRootHost.Add(_promptOverlayHost);
+
+        Content = _pageRootHost;
 
         _vm.PropertyChanged += OnViewModelPropertyChanged;
+    }
+
+    protected override bool OnBackButtonPressed()
+    {
+        if (_promptOverlayHost.IsVisible && _activePromptTcs != null)
+        {
+            CloseInputPrompt(null);
+            return true;
+        }
+
+        return base.OnBackButtonPressed();
     }
 
     protected override void OnAppearing()
@@ -1256,6 +1281,14 @@ public class MainPage : ContentPage
             leftNameGrid.Add(orderLbl, 0, 0);
             leftNameGrid.Add(nameLbl, 1, 0);
 
+            var nameCellBorder = CreateEditableCellBorder(leftNameGrid, compact, (_, _) =>
+            {
+                if (rowBorder.BindingContext is ExtraItem extra)
+                {
+                    OnEditExtraNameTapped(extra);
+                }
+            });
+
             var timeLbl = new Label
             {
                 TextColor = Color.FromArgb("#38BDF8"),
@@ -1264,6 +1297,14 @@ public class MainPage : ContentPage
                 VerticalTextAlignment = TextAlignment.Center
             };
             timeLbl.SetBinding(Label.TextProperty, nameof(ExtraItem.FormattedLength));
+
+            var timeCellBorder = CreateEditableCellBorder(timeLbl, compact, (_, _) =>
+            {
+                if (rowBorder.BindingContext is ExtraItem extra)
+                {
+                    OnEditExtraDurationTapped(extra);
+                }
+            });
 
             double btnWidth = compact ? 27 : 32;
             var actionsGrid = new Grid
@@ -1287,8 +1328,8 @@ public class MainPage : ContentPage
             actionsGrid.Add(downBtn, 1, 0);
             actionsGrid.Add(delBtn, 2, 0);
 
-            row.Add(leftNameGrid, 0, 0);
-            row.Add(timeLbl, 1, 0);
+            row.Add(nameCellBorder, 0, 0);
+            row.Add(timeCellBorder, 1, 0);
             row.Add(actionsGrid, 2, 0);
 
             rowBorder.Content = row;
@@ -1399,6 +1440,14 @@ public class MainPage : ContentPage
             };
             fromLbl.SetBinding(Label.TextProperty, new Binding(nameof(WeightJumpRule.FromWeight), stringFormat: "From {0} kg"));
 
+            var fromCellBorder = CreateEditableCellBorder(fromLbl, compact, (_, _) =>
+            {
+                if (rowBorder.BindingContext is WeightJumpRule rule)
+                {
+                    OnEditWeightJumpFromTapped(rule);
+                }
+            });
+
             var jumpLbl = new Label
             {
                 TextColor = Color.FromArgb("#FACC15"),
@@ -1407,6 +1456,14 @@ public class MainPage : ContentPage
                 VerticalTextAlignment = TextAlignment.Center
             };
             jumpLbl.SetBinding(Label.TextProperty, new Binding(nameof(WeightJumpRule.Jump), stringFormat: "+{0} kg jump"));
+
+            var jumpCellBorder = CreateEditableCellBorder(jumpLbl, compact, (_, _) =>
+            {
+                if (rowBorder.BindingContext is WeightJumpRule rule)
+                {
+                    OnEditWeightJumpValueTapped(rule);
+                }
+            });
 
             var actionCell = new Grid
             {
@@ -1439,8 +1496,8 @@ public class MainPage : ContentPage
             actionCell.Add(baseBadge);
             actionCell.Add(delBtn);
 
-            row.Add(fromLbl, 0, 0);
-            row.Add(jumpLbl, 1, 0);
+            row.Add(fromCellBorder, 0, 0);
+            row.Add(jumpCellBorder, 1, 0);
             row.Add(actionCell, 2, 0);
 
             rowBorder.Content = row;
@@ -1577,6 +1634,14 @@ public class MainPage : ContentPage
             };
             fromLbl.SetBinding(Label.TextProperty, new Binding(nameof(WarmupTimeRule.FromWeight), stringFormat: "From {0} kg"));
 
+            var fromCellBorder = CreateEditableCellBorder(fromLbl, compact, (_, _) =>
+            {
+                if (rowBorder.BindingContext is WarmupTimeRule rule)
+                {
+                    OnEditWarmupTimeFromTapped(rule);
+                }
+            });
+
             var timeLbl = new Label
             {
                 TextColor = Color.FromArgb("#38BDF8"),
@@ -1585,6 +1650,14 @@ public class MainPage : ContentPage
                 VerticalTextAlignment = TextAlignment.Center
             };
             timeLbl.SetBinding(Label.TextProperty, new Binding(nameof(WarmupTimeRule.FormattedTime), stringFormat: compact ? "{0} rest" : "{0} interval"));
+
+            var timeCellBorder = CreateEditableCellBorder(timeLbl, compact, (_, _) =>
+            {
+                if (rowBorder.BindingContext is WarmupTimeRule rule)
+                {
+                    OnEditWarmupTimeSecondsTapped(rule);
+                }
+            });
 
             var actionCell = new Grid
             {
@@ -1617,8 +1690,8 @@ public class MainPage : ContentPage
             actionCell.Add(baseBadge);
             actionCell.Add(delBtn);
 
-            row.Add(fromLbl, 0, 0);
-            row.Add(timeLbl, 1, 0);
+            row.Add(fromCellBorder, 0, 0);
+            row.Add(timeCellBorder, 1, 0);
             row.Add(actionCell, 2, 0);
 
             rowBorder.Content = row;
@@ -2483,7 +2556,12 @@ public class MainPage : ContentPage
         }
         else if (action.StartsWith("➕"))
         {
-            string? newName = await DisplayPromptAsync("New Profile", "Enter a name for the new profile:", "Create", "Cancel", "Meet Day 89kg");
+            string? newName = await ShowInputPromptAsync(
+                "New Profile",
+                "Enter a name for the new profile:",
+                "Create",
+                "Cancel",
+                initialValue: "Meet Day 89kg");
             if (!string.IsNullOrWhiteSpace(newName))
             {
                 var (ok, err) = _vm.CreateNewProfile(newName);
@@ -2495,7 +2573,7 @@ public class MainPage : ContentPage
         }
         else if (action.StartsWith("📋"))
         {
-            string? dupName = await DisplayPromptAsync(
+            string? dupName = await ShowInputPromptAsync(
                 "Duplicate Profile",
                 $"Enter a name for the copy of '{_vm.ActiveProfileName}':",
                 "Duplicate",
@@ -2513,7 +2591,7 @@ public class MainPage : ContentPage
         }
         else if (action.StartsWith("✏️"))
         {
-            string? renamed = await DisplayPromptAsync(
+            string? renamed = await ShowInputPromptAsync(
                 "Rename Profile",
                 "Enter new profile name:",
                 "Rename",
@@ -2570,7 +2648,7 @@ public class MainPage : ContentPage
 
     private async void OnEditBarbellWeightClicked(object? sender, EventArgs e)
     {
-        string? res = await DisplayPromptAsync(
+        string? res = await ShowInputPromptAsync(
             "Barbell Weight (kg)",
             "Enter barbell weight (20kg Men's, 15kg Women's, 10kg Youth):",
             "Save",
@@ -2586,7 +2664,7 @@ public class MainPage : ContentPage
 
     private async void OnEditOpenerWeightClicked(object? sender, EventArgs e)
     {
-        string? res = await DisplayPromptAsync(
+        string? res = await ShowInputPromptAsync(
             $"{_vm.CurrentLiftTitle} Opener Weight",
             $"Enter opener weight in kg ({_vm.BarbellWeight}–{Defaults.MaxOpenerWeight}):",
             "Save",
@@ -2602,7 +2680,7 @@ public class MainPage : ContentPage
 
     private async void OnEditSetupLiftsOutClicked(object? sender, EventArgs e)
     {
-        string? res = await DisplayPromptAsync(
+        string? res = await ShowInputPromptAsync(
             "Lifts Out",
             "Enter number of attempts before your opener (0–99):",
             "Save",
@@ -2618,7 +2696,7 @@ public class MainPage : ContentPage
 
     private async void OnEditStageSecondsClicked(object? sender, EventArgs e)
     {
-        string? res = await DisplayPromptAsync(
+        string? res = await ShowInputPromptAsync(
             "Stage Lift Duration (sec)",
             "Enter seconds per stage attempt (1–200):",
             "Save",
@@ -2634,7 +2712,7 @@ public class MainPage : ContentPage
 
     private async void OnEditExtraSecondsEndClicked(object? sender, EventArgs e)
     {
-        string? res = await DisplayPromptAsync(
+        string? res = await ShowInputPromptAsync(
             "Extra Time After Last Warmup",
             "Enter extra buffer time in seconds (0–999):",
             "Save",
@@ -2650,7 +2728,7 @@ public class MainPage : ContentPage
 
     private async void OnEditSnatchBreakMinutesClicked(object? sender, EventArgs e)
     {
-        string? res = await DisplayPromptAsync(
+        string? res = await ShowInputPromptAsync(
             "Presentation & Clock (min)",
             "Enter presentation + pre-snatch clock duration in minutes (0–200):",
             "Save",
@@ -2666,7 +2744,7 @@ public class MainPage : ContentPage
 
     private async void OnEditCjBreakMinutesClicked(object? sender, EventArgs e)
     {
-        string? res = await DisplayPromptAsync(
+        string? res = await ShowInputPromptAsync(
             "Break After Snatch (min)",
             "Enter competition break duration in minutes (1–200):",
             "Save",
@@ -2682,7 +2760,7 @@ public class MainPage : ContentPage
 
     private async void OnEditCjSnatchRemainingClicked(object? sender, EventArgs e)
     {
-        string? res = await DisplayPromptAsync(
+        string? res = await ShowInputPromptAsync(
             "Snatch Attempts Remaining",
             "Enter remaining snatch attempts before the break (0–99):",
             "Save",
@@ -2698,7 +2776,7 @@ public class MainPage : ContentPage
 
     private async void OnEditLiveLiftsOutClicked(object? sender, EventArgs e)
     {
-        string? res = await DisplayPromptAsync(
+        string? res = await ShowInputPromptAsync(
             "Live Lifts Out",
             "Enter updated number of lifts out (0–99):",
             "Update",
@@ -2718,17 +2796,331 @@ public class MainPage : ContentPage
         string prompt = _vm.IsSnatchSelected
             ? "Enter remaining presentation/clock time in seconds (e.g., 600 for 10m0s):"
             : "Enter remaining break time in seconds (e.g., 420 for 7m0s):";
-        string? res = await DisplayPromptAsync(
+        string? res = await ShowInputPromptAsync(
             title,
             prompt,
             "Update",
             "Cancel",
+            initialValue: _vm.LiveCjBreakRemainingSeconds.ToString(),
             keyboard: Keyboard.Numeric);
 
         if (int.TryParse(res, out int sec))
         {
             _vm.SetCustomLiveBreakRemainingSeconds(sec);
         }
+    }
+
+    private async void OnEditExtraNameTapped(ExtraItem item)
+    {
+        string? res = await ShowInputPromptAsync(
+            "Rename Warmup Extra",
+            "Enter a name for this warmup extra step:",
+            "Save",
+            "Cancel",
+            initialValue: item.Action,
+            keyboard: Keyboard.Text);
+
+        if (!string.IsNullOrWhiteSpace(res))
+        {
+            _vm.RenameExtra(item, res);
+        }
+    }
+
+    private async void OnEditExtraDurationTapped(ExtraItem item)
+    {
+        string? res = await ShowInputPromptAsync(
+            $"Duration: {item.Action}",
+            "Enter duration in seconds (1–3600):",
+            "Save",
+            "Cancel",
+            initialValue: item.Length.ToString(),
+            keyboard: Keyboard.Numeric);
+
+        if (int.TryParse(res, out int val))
+        {
+            _vm.UpdateExtraDuration(item, val);
+        }
+    }
+
+    private async void OnEditWeightJumpFromTapped(WeightJumpRule rule)
+    {
+        string? res = await ShowInputPromptAsync(
+            "Edit From Weight (kg)",
+            $"Enter starting weight in kg (1–{Defaults.MaxOpenerWeight}):",
+            "Save",
+            "Cancel",
+            initialValue: rule.FromWeight.ToString(),
+            keyboard: Keyboard.Numeric);
+
+        if (int.TryParse(res, out int val))
+        {
+            _vm.UpdateWeightJumpFromWeight(rule, val);
+        }
+    }
+
+    private async void OnEditWeightJumpValueTapped(WeightJumpRule rule)
+    {
+        string? res = await ShowInputPromptAsync(
+            $"Jump from {rule.FromWeight} kg",
+            $"Enter weight jump in kg (1–{Defaults.MaxOpenerWeight}):",
+            "Save",
+            "Cancel",
+            initialValue: rule.Jump.ToString(),
+            keyboard: Keyboard.Numeric);
+
+        if (int.TryParse(res, out int val))
+        {
+            _vm.UpdateWeightJumpValue(rule, val);
+        }
+    }
+
+    private async void OnEditWarmupTimeFromTapped(WarmupTimeRule rule)
+    {
+        string? res = await ShowInputPromptAsync(
+            "Edit From Weight (kg)",
+            $"Enter starting weight in kg (1–{Defaults.MaxOpenerWeight}):",
+            "Save",
+            "Cancel",
+            initialValue: rule.FromWeight.ToString(),
+            keyboard: Keyboard.Numeric);
+
+        if (int.TryParse(res, out int val))
+        {
+            _vm.UpdateWarmupTimeFromWeight(rule, val);
+        }
+    }
+
+    private async void OnEditWarmupTimeSecondsTapped(WarmupTimeRule rule)
+    {
+        string? res = await ShowInputPromptAsync(
+            $"Rest Interval from {rule.FromWeight} kg",
+            "Enter rest interval in seconds (1–3600):",
+            "Save",
+            "Cancel",
+            initialValue: rule.Seconds.ToString(),
+            keyboard: Keyboard.Numeric);
+
+        if (int.TryParse(res, out int val))
+        {
+            _vm.UpdateWarmupTimeSeconds(rule, val);
+        }
+    }
+
+    private Task<string?> ShowInputPromptAsync(
+        string title,
+        string message,
+        string accept = "Save",
+        string cancel = "Cancel",
+        string? initialValue = null,
+        Keyboard? keyboard = null)
+    {
+        if (_activePromptTcs != null)
+        {
+            CloseInputPrompt(null);
+        }
+
+        var tcs = new TaskCompletionSource<string?>();
+        _activePromptTcs = tcs;
+
+        _promptOverlayHost.Children.Clear();
+
+        var backdropTap = new TapGestureRecognizer();
+        backdropTap.Tapped += (_, _) => CloseInputPrompt(null);
+        var backdropBox = new BoxView
+        {
+            Color = Colors.Transparent,
+            HorizontalOptions = LayoutOptions.Fill,
+            VerticalOptions = LayoutOptions.Fill
+        };
+        backdropBox.GestureRecognizers.Add(backdropTap);
+        _promptOverlayHost.Add(backdropBox);
+
+        var dialogBorder = new Border
+        {
+            BackgroundColor = Color.FromArgb("#1E293B"),
+            Stroke = Color.FromArgb("#38BDF8"),
+            StrokeThickness = 1.5,
+            StrokeShape = new RoundRectangle { CornerRadius = 12 },
+            Padding = new Thickness(16, 14),
+            HorizontalOptions = LayoutOptions.Center,
+            VerticalOptions = LayoutOptions.Center,
+            WidthRequest = 320,
+            MaximumWidthRequest = 400,
+            Margin = new Thickness(16, 0, 16, 70)
+        };
+
+        var dialogStack = new VerticalStackLayout { Spacing = 10 };
+
+        dialogStack.Add(new Label
+        {
+            Text = title,
+            TextColor = Color.FromArgb("#38BDF8"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 15
+        });
+
+        dialogStack.Add(new Label
+        {
+            Text = message,
+            TextColor = Color.FromArgb("#CBD5E1"),
+            FontSize = 12.5,
+            LineHeight = 1.15
+        });
+
+        var entryBorder = new Border
+        {
+            BackgroundColor = Color.FromArgb("#0F172A"),
+            Stroke = Color.FromArgb("#475569"),
+            StrokeThickness = 1,
+            StrokeShape = new RoundRectangle { CornerRadius = 8 },
+            Padding = new Thickness(8, 2)
+        };
+
+        var promptEntry = new Entry
+        {
+            Text = initialValue ?? string.Empty,
+            Keyboard = keyboard ?? Keyboard.Default,
+            TextColor = Colors.White,
+            BackgroundColor = Colors.Transparent,
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 15,
+            ReturnType = ReturnType.Done,
+            ClearButtonVisibility = ClearButtonVisibility.WhileEditing,
+            HeightRequest = 40
+        };
+
+        promptEntry.Focused += (_, _) => SelectAllEntryText(promptEntry);
+        promptEntry.Completed += (_, _) => CloseInputPrompt(promptEntry.Text);
+
+        entryBorder.Content = promptEntry;
+        dialogStack.Add(entryBorder);
+
+        var btnRow = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Star }
+            },
+            ColumnSpacing = 10,
+            Margin = new Thickness(0, 4, 0, 0)
+        };
+
+        var cancelBtn = new Button
+        {
+            Text = cancel,
+            BackgroundColor = Color.FromArgb("#334155"),
+            TextColor = Color.FromArgb("#E2E8F0"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 13,
+            CornerRadius = 8,
+            HeightRequest = 38
+        };
+        cancelBtn.Clicked += (_, _) => CloseInputPrompt(null);
+
+        var acceptBtn = new Button
+        {
+            Text = accept,
+            BackgroundColor = Color.FromArgb("#0284C7"),
+            TextColor = Colors.White,
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 13,
+            CornerRadius = 8,
+            HeightRequest = 38
+        };
+        acceptBtn.Clicked += (_, _) => CloseInputPrompt(promptEntry.Text);
+
+        btnRow.Add(cancelBtn, 0, 0);
+        btnRow.Add(acceptBtn, 1, 0);
+        dialogStack.Add(btnRow);
+
+        dialogBorder.Content = dialogStack;
+        _promptOverlayHost.Add(dialogBorder);
+        _promptOverlayHost.IsVisible = true;
+
+        Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(50), () =>
+        {
+            if (!_promptOverlayHost.IsVisible)
+            {
+                return;
+            }
+            promptEntry.Focus();
+            SelectAllEntryText(promptEntry);
+        });
+
+        return tcs.Task;
+    }
+
+    private void CloseInputPrompt(string? result)
+    {
+        var tcs = _activePromptTcs;
+        _activePromptTcs = null;
+
+        _promptOverlayHost.IsVisible = false;
+        _promptOverlayHost.Children.Clear();
+
+        tcs?.TrySetResult(result);
+    }
+
+    private void SelectAllEntryText(Entry entry)
+    {
+        if (string.IsNullOrEmpty(entry.Text))
+        {
+            return;
+        }
+
+        int len = entry.Text.Length;
+        entry.CursorPosition = 0;
+        entry.SelectionLength = len;
+
+        Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(40), () =>
+        {
+            if (!string.IsNullOrEmpty(entry.Text))
+            {
+                entry.CursorPosition = 0;
+                entry.SelectionLength = entry.Text.Length;
+#if ANDROID
+                if (entry.Handler?.PlatformView is Android.Widget.EditText et)
+                {
+                    et.SetSelectAllOnFocus(true);
+                    et.Post(() =>
+                    {
+                        if (!string.IsNullOrEmpty(et.Text))
+                        {
+                            et.SelectAll();
+                        }
+                    });
+                }
+#endif
+            }
+        });
+    }
+
+    private static Border CreateEditableCellBorder(View content, bool compact, EventHandler<TappedEventArgs> onTapped)
+    {
+        content.InputTransparent = true;
+        if (content is Layout childLayout)
+        {
+            childLayout.CascadeInputTransparent = true;
+        }
+
+        var border = new Border
+        {
+            BackgroundColor = Color.FromArgb("#1E293B"),
+            Stroke = Color.FromArgb("#334155"),
+            StrokeThickness = 1,
+            StrokeShape = new RoundRectangle { CornerRadius = 6 },
+            Padding = new Thickness(compact ? 6 : 8, 5),
+            VerticalOptions = LayoutOptions.Center,
+            HorizontalOptions = LayoutOptions.Fill
+        };
+
+        var borderTap = new TapGestureRecognizer();
+        borderTap.Tapped += onTapped;
+        border.GestureRecognizers.Add(borderTap);
+
+        border.Content = content;
+        return border;
     }
 
     // =========================================================================

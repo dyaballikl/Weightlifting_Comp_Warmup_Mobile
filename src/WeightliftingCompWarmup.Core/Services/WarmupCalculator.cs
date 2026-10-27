@@ -46,6 +46,14 @@ public static class WarmupCalculator
 
         if (baseJumpKvp.Key == 0 && baseJumpKvp.Value == 0)
         {
+            baseJumpKvp = jumps
+                .Where(kvp => kvp.Key > 0 && kvp.Value > 0)
+                .OrderBy(kvp => kvp.Key)
+                .FirstOrDefault();
+        }
+
+        if (baseJumpKvp.Key == 0 && baseJumpKvp.Value == 0)
+        {
             return 0;
         }
 
@@ -209,6 +217,14 @@ public static class WarmupCalculator
                 .OrderByDescending(kvp => kvp.Key)
                 .Select(kvp => kvp.Value)
                 .FirstOrDefault();
+
+            if (stepSeconds == 0 && times.Count > 0)
+            {
+                stepSeconds = times
+                    .OrderBy(kvp => kvp.Key)
+                    .Select(kvp => kvp.Value)
+                    .FirstOrDefault();
+            }
 
             if (weight == maxWeight)
             {
