@@ -63,6 +63,10 @@ public class MainViewModel : INotifyPropertyChanged
     private bool _isCjSnatchManuallyExpanded;
     private bool _isCjBreakManuallyExpanded;
     private int _activeStepOrder;
+    private string _liveActiveStepDescription = "Wait to start";
+    private string _liveActiveStepRemaining = "0s";
+    private double _liveActiveStepProgress;
+    private DateTime _lastTimerTickUtc;
 
     private ObservableCollection<SetupStepItemViewModel> _previewSteps = new();
     private ObservableCollection<ExtraItem> _extrasList = new();
@@ -557,7 +561,9 @@ public class MainViewModel : INotifyPropertyChanged
             if (_isLiveTimerRunning != value)
             {
                 _isLiveTimerRunning = value;
+                _lastTimerTickUtc = value ? DateTime.UtcNow : default;
                 _platformService.SetKeepScreenOn(value);
+                _platformService.SetLiveMiniTimerEnabled(value && _isLiveMode);
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(LiveTimerButtonText));
                 OnPropertyChanged(nameof(LiveTimerButtonColorHex));
@@ -773,6 +779,24 @@ public class MainViewModel : INotifyPropertyChanged
     {
         get => _activeStepOrder;
         private set { if (_activeStepOrder != value) { _activeStepOrder = value; OnPropertyChanged(); } }
+    }
+
+    public string LiveActiveStepDescription
+    {
+        get => _liveActiveStepDescription;
+        private set { if (_liveActiveStepDescription != value) { _liveActiveStepDescription = value; OnPropertyChanged(); } }
+    }
+
+    public string LiveActiveStepRemaining
+    {
+        get => _liveActiveStepRemaining;
+        private set { if (_liveActiveStepRemaining != value) { _liveActiveStepRemaining = value; OnPropertyChanged(); } }
+    }
+
+    public double LiveActiveStepProgress
+    {
+        get => _liveActiveStepProgress;
+        private set { if (Math.Abs(_liveActiveStepProgress - value) > 0.001) { _liveActiveStepProgress = value; OnPropertyChanged(); } }
     }
 
     // Commands
@@ -1384,6 +1408,8 @@ public class MainViewModel : INotifyPropertyChanged
         _isCjBreakManuallyExpanded = false;
 
         IsLiveTimerRunning = autoStart;
+        _lastTimerTickUtc = autoStart ? DateTime.UtcNow : default;
+        _platformService.SetLiveMiniTimerEnabled(autoStart && _isLiveMode);
 
         var snapshot = _liveSession.GetSnapshot(DateTime.Now);
         var nextLiveSteps = new ObservableCollection<LiveStepItemViewModel>();
@@ -1412,6 +1438,8 @@ public class MainViewModel : INotifyPropertyChanged
             _liveSession.IsRunning = false;
         }
         IsLiveTimerRunning = false;
+        _lastTimerTickUtc = default;
+        _platformService.SetLiveMiniTimerEnabled(false);
     }
 
     private void ExecuteToggleLiveTimer()
@@ -1428,7 +1456,7 @@ public class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Called every 1 second by the UI dispatcher timer while the view is active.
+    /// Called every 1 second by the UI dispatcher timer while the view is active or in floating mini-timer mode.
     /// </summary>
     public void OnTimerTick()
     {
@@ -1437,7 +1465,33 @@ public class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        var snapshot = _liveSession.Tick(DateTime.Now);
+        DateTime nowUtc = DateTime.UtcNow;
+        int ticksToRun = 1;
+        if (_lastTimerTickUtc != default)
+        {
+            double elapsedSeconds = (nowUtc - _lastTimerTickUtc).TotalSeconds;
+            if (elapsedSeconds >= 1.75)
+            {
+                ticksToRun = Math.Clamp((int)Math.Round(elapsedSeconds), 1, 3600);
+            }
+        }
+        _lastTimerTickUtc = nowUtc;
+
+        DateTime localNow = DateTime.Now;
+        LiveSessionSnapshot snapshot = _liveSession.Tick(localNow);
+        bool triggerBeep = snapshot.TriggerBeep;
+
+        for (int i = 1; i < ticksToRun; i++)
+        {
+            snapshot = _liveSession.Tick(localNow);
+            triggerBeep |= snapshot.TriggerBeep;
+        }
+
+        if (triggerBeep && !snapshot.TriggerBeep)
+        {
+            snapshot = snapshot with { TriggerBeep = true };
+        }
+
         ApplyLiveSnapshot(snapshot);
     }
 
@@ -1631,6 +1685,37 @@ public class MainViewModel : INotifyPropertyChanged
         {
             var existing = LiveSteps.FirstOrDefault(s => s.Order == stepSnap.Order);
             existing?.UpdateFromSnapshot(stepSnap);
+        }
+
+        var activeStep = snapshot.Steps.FirstOrDefault(s => s.Order == snapshot.ActiveStepOrder)
+                         ?? snapshot.Steps.FirstOrDefault(s => s.Status == StepRunStatus.Active);
+        if (activeStep != null)
+        {
+            if (activeStep.IsPreStep)
+            {
+                LiveActiveStepDescription = "Wait to start";
+            }
+            else if (activeStep.IsOpener)
+            {
+                LiveActiveStepDescription = $"Open at {activeStep.WeightKg} kg";
+            }
+            else if (activeStep.IsLift && activeStep.WeightKg > 0)
+            {
+                LiveActiveStepDescription = $"Lift {activeStep.WeightKg} kg";
+            }
+            else
+            {
+                LiveActiveStepDescription = activeStep.ActionTitle;
+            }
+
+            LiveActiveStepRemaining = activeStep.CountdownBadgeText;
+            LiveActiveStepProgress = activeStep.ProgressFraction;
+        }
+        else
+        {
+            LiveActiveStepDescription = CurrentLiftTitle;
+            LiveActiveStepRemaining = snapshot.TimeToOpenDisplay;
+            LiveActiveStepProgress = 0.0;
         }
 
         if (snapshot.TriggerBeep)

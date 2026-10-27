@@ -9,6 +9,120 @@ namespace WeightliftingCompWarmup.Maui.Services;
 /// </summary>
 public class DevicePlatformService
 {
+    public static bool IsLiveMiniTimerActive { get; private set; }
+    public static bool IsInPipMode { get; private set; }
+    public static event Action<bool>? PipModeChanged;
+
+    /// <summary>
+    /// Enables or disables the automatic floating mini-timer (Picture-in-Picture overlay)
+    /// when the user navigates to the home screen while a Live warmup timer is running.
+    /// </summary>
+    public void SetLiveMiniTimerEnabled(bool enabled)
+    {
+        IsLiveMiniTimerActive = enabled;
+#if ANDROID
+        try
+        {
+            MainThread.BeginInvokeOnMainThread(() => UpdateAndroidPipParams(enabled));
+        }
+        catch
+        {
+            // Ignore when MainThread is unavailable in unit tests
+        }
+#endif
+    }
+
+#if ANDROID
+    public static Android.App.PictureInPictureParams? BuildPipParams(bool autoEnterEnabled)
+    {
+        if (!OperatingSystem.IsAndroidVersionAtLeast(26))
+        {
+            return null;
+        }
+
+        var builder = new Android.App.PictureInPictureParams.Builder();
+        builder.SetAspectRatio(new Android.Util.Rational(19, 8));
+
+        if (OperatingSystem.IsAndroidVersionAtLeast(31))
+        {
+            builder.SetAutoEnterEnabled(autoEnterEnabled);
+            builder.SetSeamlessResizeEnabled(true);
+        }
+
+        return builder.Build();
+    }
+
+    private static void UpdateAndroidPipParams(bool enabled)
+    {
+        if (!OperatingSystem.IsAndroidVersionAtLeast(26))
+        {
+            return;
+        }
+
+        try
+        {
+            var activity = Microsoft.Maui.ApplicationModel.Platform.CurrentActivity;
+            if (activity != null)
+            {
+                var pipParams = BuildPipParams(enabled);
+                if (pipParams != null)
+                {
+                    activity.SetPictureInPictureParams(pipParams);
+                }
+            }
+        }
+        catch
+        {
+            // Ignore if Picture-in-Picture is unsupported on this device
+        }
+    }
+
+    public static void TryEnterMiniTimerPip(Android.App.Activity activity)
+    {
+        if (!IsLiveMiniTimerActive || !OperatingSystem.IsAndroidVersionAtLeast(26))
+        {
+            return;
+        }
+
+        try
+        {
+            if (!activity.IsInPictureInPictureMode)
+            {
+                var pipParams = BuildPipParams(true);
+                if (pipParams != null)
+                {
+                    activity.EnterPictureInPictureMode(pipParams);
+                }
+            }
+        }
+        catch
+        {
+            // Ignore if Picture-in-Picture is unsupported or unavailable
+        }
+    }
+#endif
+
+    public static void NotifyPipModeChanged(bool isInPipMode)
+    {
+        if (IsInPipMode == isInPipMode)
+        {
+            return;
+        }
+
+        IsInPipMode = isInPipMode;
+        try
+        {
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                PipModeChanged?.Invoke(isInPipMode);
+            });
+        }
+        catch
+        {
+            PipModeChanged?.Invoke(isInPipMode);
+        }
+    }
+
     /// <summary>
     /// Prevents or allows the device screen from dimming/sleeping during live warmup sessions.
     /// Equivalent to <c>Utilities.PreventMonitorPowerdown</c> / <c>AllowMonitorPowerdown</c>.

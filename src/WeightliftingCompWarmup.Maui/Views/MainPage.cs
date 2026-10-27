@@ -7,6 +7,7 @@ using Microsoft.Maui.Graphics;
 using WeightliftingCompWarmup.Core.Models;
 using WeightliftingCompWarmup.Core.Services;
 using WeightliftingCompWarmup.Maui.Controls;
+using WeightliftingCompWarmup.Maui.Services;
 using WeightliftingCompWarmup.Maui.ViewModels;
 
 namespace WeightliftingCompWarmup.Maui.Views;
@@ -22,10 +23,12 @@ public class MainPage : ContentPage
     private bool _isWideLayout;
     private bool _layoutInitialized;
     private bool _firstOpenHelpChecked;
+    private bool _isInPipMode;
 
     private readonly Grid _pageRootHost;
     private readonly Grid _rootGrid;
     private readonly Grid _promptOverlayHost;
+    private readonly View _pipOverlayHost;
     private TaskCompletionSource<string?>? _activePromptTcs;
     private readonly ContentView _headerContainer;
     private readonly ContentView _bodyContainer;
@@ -76,13 +79,112 @@ public class MainPage : ContentPage
             ZIndex = 100
         };
 
+        _pipOverlayHost = BuildPipMiniTimerOverlay();
+
         _pageRootHost = new Grid();
         _pageRootHost.Add(_rootGrid);
         _pageRootHost.Add(_promptOverlayHost);
+        _pageRootHost.Add(_pipOverlayHost);
 
         Content = _pageRootHost;
 
         _vm.PropertyChanged += OnViewModelPropertyChanged;
+        DevicePlatformService.PipModeChanged += OnPipModeChanged;
+    }
+
+    private View BuildPipMiniTimerOverlay()
+    {
+        var stepLabel = new Label
+        {
+            FontSize = 14,
+            FontAttributes = FontAttributes.Bold,
+            FontAutoScalingEnabled = false,
+            TextColor = Color.FromArgb("#F8FAFC"),
+            HorizontalTextAlignment = TextAlignment.Center,
+            LineBreakMode = LineBreakMode.TailTruncation,
+            MaxLines = 1
+        };
+        stepLabel.SetBinding(Label.TextProperty, nameof(MainViewModel.LiveActiveStepDescription));
+
+        var remainingLabel = new Label
+        {
+            FontSize = 26,
+            FontAttributes = FontAttributes.Bold,
+            FontAutoScalingEnabled = false,
+            TextColor = Color.FromArgb("#FACC15"),
+            HorizontalTextAlignment = TextAlignment.Center,
+            LineBreakMode = LineBreakMode.NoWrap,
+            MaxLines = 1
+        };
+        remainingLabel.SetBinding(Label.TextProperty, nameof(MainViewModel.LiveActiveStepRemaining));
+
+        var progressBar = new ProgressBar
+        {
+            ProgressColor = Color.FromArgb("#16A34A"),
+            BackgroundColor = Color.FromArgb("#1E293B"),
+            HeightRequest = 4,
+            VerticalOptions = LayoutOptions.End
+        };
+        progressBar.SetBinding(ProgressBar.ProgressProperty, nameof(MainViewModel.LiveActiveStepProgress));
+
+        var contentGrid = new Grid
+        {
+            RowDefinitions =
+            {
+                new RowDefinition { Height = GridLength.Star },
+                new RowDefinition { Height = new GridLength(4) }
+            }
+        };
+
+        contentGrid.Add(new VerticalStackLayout
+        {
+            Padding = new Thickness(8, 4),
+            Spacing = 1,
+            VerticalOptions = LayoutOptions.Center,
+            HorizontalOptions = LayoutOptions.Fill,
+            Children =
+            {
+                stepLabel,
+                remainingLabel
+            }
+        }, 0, 0);
+
+        contentGrid.Add(progressBar, 0, 1);
+
+        return new Border
+        {
+            IsVisible = false,
+            ZIndex = 200,
+            BackgroundColor = Color.FromArgb("#0F172A"),
+            Stroke = new SolidColorBrush(Color.FromArgb("#FACC15")),
+            StrokeThickness = 2,
+            Padding = 0,
+            Content = contentGrid
+        };
+    }
+
+    private void OnPipModeChanged(bool isInPip)
+    {
+        _isInPipMode = isInPip;
+        if (isInPip)
+        {
+            if (_promptOverlayHost.IsVisible && _activePromptTcs != null)
+            {
+                CloseInputPrompt(null);
+            }
+
+            _rootGrid.IsVisible = false;
+            _pipOverlayHost.IsVisible = true;
+        }
+        else
+        {
+            _pipOverlayHost.IsVisible = false;
+            _rootGrid.IsVisible = true;
+            if (_vm.IsLiveMode)
+            {
+                ScrollActiveStepIntoViewIfNeeded(animated: false);
+            }
+        }
     }
 
     protected override bool OnBackButtonPressed()
@@ -128,14 +230,13 @@ public class MainPage : ContentPage
     protected override void OnDisappearing()
     {
         base.OnDisappearing();
-        _vm.StopLiveTimer();
     }
 
     protected override void OnSizeAllocated(double width, double height)
     {
         base.OnSizeAllocated(width, height);
 
-        if (width <= 0 || height <= 0)
+        if (width <= 0 || height <= 0 || _isInPipMode)
         {
             return;
         }
