@@ -359,15 +359,48 @@ public sealed class AndroidFloatingTimerOverlay
                 return;
             }
 
-            Hide();
+            var intent = ctx.PackageManager?.GetLaunchIntentForPackage(ctx.PackageName ?? "com.weightlifting.compwarmup")
+                         ?? new Intent(ctx, typeof(MainActivity));
+            intent.SetAction(Intent.ActionMain);
+            intent.AddCategory(Intent.CategoryLauncher);
+            intent.AddFlags(
+                ActivityFlags.NewTask |
+                ActivityFlags.SingleTop |
+                ActivityFlags.ReorderToFront |
+                ActivityFlags.ResetTaskIfNeeded);
 
-            var intent = new Intent(ctx, typeof(MainActivity));
-            intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.SingleTop | ActivityFlags.ReorderToFront);
-            ctx.StartActivity(intent);
+            // Launch while the overlay window is still visible so Android 10-15 grants immediate foregrounding
+            bool launched = false;
+            if (OperatingSystem.IsAndroidVersionAtLeast(34))
+            {
+                try
+                {
+                    using var options = ActivityOptions.MakeBasic();
+                    options.SetPendingIntentBackgroundActivityStartMode(BackgroundActivityStartMode.Allowed);
+                    using var pendingIntent = PendingIntent.GetActivity(
+                        ctx,
+                        0,
+                        intent,
+                        PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
+                    pendingIntent?.Send(ctx, 0, null, null, null, null, options.ToBundle());
+                    launched = true;
+                }
+                catch
+                {
+                    launched = false;
+                }
+            }
+
+            if (!launched)
+            {
+                ctx.StartActivity(intent);
+            }
+
+            _mainHandler.PostDelayed(Hide, 180);
         }
         catch
         {
-            // Ignore if activity launch fails
+            Hide();
         }
     }
 

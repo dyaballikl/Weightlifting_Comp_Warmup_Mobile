@@ -11,16 +11,9 @@ namespace WeightliftingCompWarmup.Maui;
     Theme = "@style/Maui.SplashTheme",
     MainLauncher = true,
     LaunchMode = LaunchMode.SingleTop,
-    SupportsPictureInPicture = true,
     ResizeableActivity = true,
     ConfigurationChanges = ConfigChanges.ScreenSize | ConfigChanges.Orientation | ConfigChanges.UiMode |
                            ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.Density)]
-[Layout(
-    DefaultWidth = "144dp",
-    DefaultHeight = "60dp",
-    MinWidth = "120dp",
-    MinHeight = "50dp",
-    Gravity = "bottom|end")]
 public class MainActivity : MauiAppCompatActivity
 {
     protected override void OnUserLeaveHint()
@@ -35,24 +28,10 @@ public class MainActivity : MauiAppCompatActivity
         DevicePlatformService.OnAndroidActivityStopped(this);
     }
 
-    public override void OnPictureInPictureModeChanged(bool isInPictureInPictureMode, Configuration? newConfig)
-    {
-        if (OperatingSystem.IsAndroidVersionAtLeast(26))
-        {
-            base.OnPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
-        }
-        DevicePlatformService.NotifyPipModeChanged(isInPictureInPictureMode);
-    }
-
     protected override void OnResume()
     {
         base.OnResume();
         AndroidFloatingTimerOverlay.Shared.Hide();
-        DevicePlatformService.RefreshAndroidMiniTimerState(this);
-        if (OperatingSystem.IsAndroidVersionAtLeast(26) && !IsInPictureInPictureMode)
-        {
-            DevicePlatformService.NotifyPipModeChanged(false);
-        }
     }
 }
 #endif

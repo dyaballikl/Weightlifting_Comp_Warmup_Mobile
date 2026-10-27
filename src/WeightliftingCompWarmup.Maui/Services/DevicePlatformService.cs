@@ -141,8 +141,6 @@ public class DevicePlatformService
                 {
                     PromptAndroidOverlayPermissionIfNeeded();
                 }
-
-                UpdateAndroidPipParams(enabled);
             });
         }
         catch
@@ -238,59 +236,6 @@ public class DevicePlatformService
         }
     }
 
-    public static Android.App.PictureInPictureParams? BuildPipParams(bool autoEnterEnabled)
-    {
-        if (!OperatingSystem.IsAndroidVersionAtLeast(26))
-        {
-            return null;
-        }
-
-        // When "Appear on top" permission is granted, we use the compact AndroidFloatingTimerOverlay pill
-        // instead of Android's video Picture-in-Picture container.
-        bool usePip = autoEnterEnabled && !AndroidFloatingTimerOverlay.CanDrawOverlays();
-
-        var builder = new Android.App.PictureInPictureParams.Builder();
-        builder.SetAspectRatio(new Android.Util.Rational(135, 100));
-
-        if (OperatingSystem.IsAndroidVersionAtLeast(31))
-        {
-            builder.SetAutoEnterEnabled(usePip);
-            builder.SetSeamlessResizeEnabled(true);
-        }
-
-        return builder.Build();
-    }
-
-    public static void RefreshAndroidMiniTimerState(Android.App.Activity activity)
-    {
-        if (!OperatingSystem.IsAndroidVersionAtLeast(26))
-        {
-            return;
-        }
-
-        try
-        {
-            var pipParams = BuildPipParams(IsLiveMiniTimerActive);
-            if (pipParams != null)
-            {
-                activity.SetPictureInPictureParams(pipParams);
-            }
-        }
-        catch
-        {
-            // Ignore if Picture-in-Picture is unsupported on this device
-        }
-    }
-
-    private static void UpdateAndroidPipParams(bool enabled)
-    {
-        var activity = Microsoft.Maui.ApplicationModel.Platform.CurrentActivity;
-        if (activity != null)
-        {
-            RefreshAndroidMiniTimerState(activity);
-        }
-    }
-
     public static void OnAndroidActivityStopped(Android.App.Activity activity)
     {
         if (!IsLiveMiniTimerActive)
@@ -316,28 +261,6 @@ public class DevicePlatformService
         if (AndroidFloatingTimerOverlay.CanDrawOverlays(activity))
         {
             AndroidFloatingTimerOverlay.Shared.Show(activity);
-            return;
-        }
-
-        if (!OperatingSystem.IsAndroidVersionAtLeast(26))
-        {
-            return;
-        }
-
-        try
-        {
-            if (!activity.IsInPictureInPictureMode)
-            {
-                var pipParams = BuildPipParams(true);
-                if (pipParams != null)
-                {
-                    activity.EnterPictureInPictureMode(pipParams);
-                }
-            }
-        }
-        catch
-        {
-            // Ignore if Picture-in-Picture is unsupported or unavailable
         }
     }
 #endif
