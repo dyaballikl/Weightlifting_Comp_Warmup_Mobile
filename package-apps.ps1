@@ -74,6 +74,16 @@ if (-not $NoVersionBump) {
         Set-Content -Path $StoreListingFile -Value $ListingContent -NoNewline -Encoding UTF8
     }
 
+    $VersionJsonFile = Join-Path $ProjectRoot "version.json"
+    if (Test-Path $VersionJsonFile) {
+        $VersionJsonContent = Get-Content -Path $VersionJsonFile -Raw
+        $VersionJsonContent = [regex]::Replace($VersionJsonContent, '"latestVersion":\s*"[^"]+"', "`"latestVersion`": `"$DisplayVersion`"")
+        $VersionJsonContent = [regex]::Replace($VersionJsonContent, '"latestBuild":\s*\d+', "`"latestBuild`": $VersionCode")
+        $VersionJsonContent = [regex]::Replace($VersionJsonContent, '"androidLatestVersion":\s*"[^"]+"', "`"androidLatestVersion`": `"$DisplayVersion`"")
+        $VersionJsonContent = [regex]::Replace($VersionJsonContent, '"iosLatestVersion":\s*"[^"]+"', "`"iosLatestVersion`": `"$DisplayVersion`"")
+        Set-Content -Path $VersionJsonFile -Value $VersionJsonContent -NoNewline -Encoding UTF8
+    }
+
     Write-Host "=== Bumped Version: $OldDisplayVersion (build $OldVersionCode) -> $DisplayVersion (build $VersionCode) ===" -ForegroundColor Magenta
 } else {
     $DisplayVersion = $OldDisplayVersion

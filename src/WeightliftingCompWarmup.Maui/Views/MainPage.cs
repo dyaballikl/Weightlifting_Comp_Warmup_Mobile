@@ -69,7 +69,15 @@ public class MainPage : ContentPage
 
         _headerContainer.Content = BuildTopNavigationHeader();
         _rootGrid.Add(_headerContainer, 0, 0);
-        _rootGrid.Add(BuildStatusBanner(), 0, 1);
+        _rootGrid.Add(new VerticalStackLayout
+        {
+            Spacing = 6,
+            Children =
+            {
+                BuildUpdateAvailableBanner(),
+                BuildStatusBanner()
+            }
+        }, 0, 1);
         _rootGrid.Add(_bodyContainer, 0, 2);
 
         _promptOverlayHost = new Grid
@@ -224,6 +232,16 @@ public class MainPage : ContentPage
                     }
                 });
             }
+        }
+
+        CheckForAppUpdate();
+    }
+
+    public void CheckForAppUpdate()
+    {
+        if (!_isInPipMode)
+        {
+            _ = _vm.CheckForUpdateOnOpenAsync(HelpAboutModalPage.AppVersion);
         }
     }
 
@@ -548,6 +566,71 @@ public class MainPage : ContentPage
         {
             StyleSegmentButton(_liveHeaderBtn, _vm.IsLiveMode, "#16A34A", "#4ADE80");
         }
+    }
+
+    private View BuildUpdateAvailableBanner()
+    {
+        var border = new Border
+        {
+            BackgroundColor = Color.FromArgb("#422006"),
+            Stroke = Color.FromArgb("#FACC15"),
+            StrokeThickness = 1,
+            StrokeShape = new RoundRectangle { CornerRadius = 8 },
+            Padding = new Thickness(12, 6)
+        };
+        border.SetBinding(IsVisibleProperty, nameof(MainViewModel.HasUpdateBanner));
+
+        var grid = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Auto },
+                new ColumnDefinition { Width = GridLength.Auto }
+            },
+            ColumnSpacing = 8
+        };
+
+        var label = new Label
+        {
+            TextColor = Color.FromArgb("#FEF08A"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 12,
+            VerticalTextAlignment = TextAlignment.Center
+        };
+        label.SetBinding(Label.TextProperty, nameof(MainViewModel.UpdateBannerText));
+
+        var updateBtn = new Button
+        {
+            Text = "UPDATE",
+            BackgroundColor = Color.FromArgb("#FACC15"),
+            TextColor = Color.FromArgb("#0F172A"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 11,
+            CornerRadius = 6,
+            Padding = new Thickness(10, 0),
+            HeightRequest = 26,
+            VerticalOptions = LayoutOptions.Center
+        };
+        updateBtn.Clicked += async (_, _) => await _vm.OpenStoreUpdateAsync();
+
+        var dismissBtn = new Button
+        {
+            Text = "✕",
+            BackgroundColor = Colors.Transparent,
+            TextColor = Color.FromArgb("#FDE047"),
+            FontSize = 12,
+            Padding = new Thickness(6, 0),
+            HeightRequest = 26,
+            VerticalOptions = LayoutOptions.Center
+        };
+        dismissBtn.Clicked += (_, _) => _vm.DismissUpdateBanner();
+
+        grid.Add(label, 0, 0);
+        grid.Add(updateBtn, 1, 0);
+        grid.Add(dismissBtn, 2, 0);
+        border.Content = grid;
+        return border;
     }
 
     private View BuildStatusBanner()

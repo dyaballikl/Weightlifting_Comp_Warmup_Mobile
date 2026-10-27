@@ -16,9 +16,27 @@ public class App : Application
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
-        return new Window(new NavigationPage(_mainPage))
+        var window = new Window(new NavigationPage(_mainPage))
         {
             Title = "Comp OWL — Weightlifting Comp Warmup"
         };
+
+        bool wasBackgrounded = false;
+        window.Stopped += (_, _) => wasBackgrounded = true;
+        window.Resumed += (_, _) =>
+        {
+            wasBackgrounded = false;
+            _mainPage.CheckForAppUpdate();
+        };
+        window.Activated += (_, _) =>
+        {
+            if (wasBackgrounded)
+            {
+                wasBackgrounded = false;
+                _mainPage.CheckForAppUpdate();
+            }
+        };
+
+        return window;
     }
 }

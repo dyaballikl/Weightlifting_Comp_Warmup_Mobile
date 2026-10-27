@@ -304,4 +304,25 @@ public class WarmupEngineTests
         var ruleNonBase = new WeightJumpRule(40, 10, isBaseRule: false);
         Assert.True(ruleNonBase.CanDelete);
     }
+
+    [Fact]
+    public void VersionManifestJson_ContainsValidSemanticVersions()
+    {
+        string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        string manifestPath = Path.Combine(repoRoot, "version.json");
+        Assert.True(File.Exists(manifestPath), $"Expected version.json at {manifestPath}");
+
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifestPath));
+        var root = doc.RootElement;
+
+        string? latest = root.GetProperty("latestVersion").GetString();
+        string? androidLatest = root.GetProperty("androidLatestVersion").GetString();
+        string? iosLatest = root.GetProperty("iosLatestVersion").GetString();
+
+        Assert.False(string.IsNullOrWhiteSpace(latest));
+        Assert.True(Version.TryParse(latest, out var parsedLatest));
+        Assert.Equal(latest, androidLatest);
+        Assert.Equal(latest, iosLatest);
+        Assert.True(parsedLatest > new Version(2, 0, 0));
+    }
 }

@@ -67,6 +67,9 @@ public class MainViewModel : INotifyPropertyChanged
     private string _liveActiveStepRemaining = "0s";
     private double _liveActiveStepProgress;
     private DateTime _lastTimerTickUtc;
+    private string _updateAvailableVersion = string.Empty;
+    private bool _isUpdateBannerDismissed;
+    private bool _isCheckingForUpdate;
 
     private ObservableCollection<SetupStepItemViewModel> _previewSteps = new();
     private ObservableCollection<ExtraItem> _extrasList = new();
@@ -230,6 +233,74 @@ public class MainViewModel : INotifyPropertyChanged
     }
 
     public bool HasStatusBanner => !string.IsNullOrWhiteSpace(_statusBannerText);
+
+    public string UpdateAvailableVersion
+    {
+        get => _updateAvailableVersion;
+        set
+        {
+            string normalized = value?.Trim() ?? string.Empty;
+            if (_updateAvailableVersion != normalized)
+            {
+                _updateAvailableVersion = normalized;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasUpdateBanner));
+                OnPropertyChanged(nameof(UpdateBannerText));
+            }
+        }
+    }
+
+    public bool HasUpdateBanner => !string.IsNullOrWhiteSpace(_updateAvailableVersion) && !_isUpdateBannerDismissed;
+
+    public string UpdateBannerText => string.IsNullOrWhiteSpace(_updateAvailableVersion)
+        ? string.Empty
+        : $"⬆️ Update available (v{_updateAvailableVersion}) — tap Update to get the latest version.";
+
+    public void DismissUpdateBanner()
+    {
+        if (!_isUpdateBannerDismissed)
+        {
+            _isUpdateBannerDismissed = true;
+            OnPropertyChanged(nameof(HasUpdateBanner));
+        }
+    }
+
+    public async Task CheckForUpdateOnOpenAsync(string currentVersion)
+    {
+        // Re-surface a previously discovered update when the app is opened again
+        if (!string.IsNullOrWhiteSpace(_updateAvailableVersion) && _isUpdateBannerDismissed)
+        {
+            _isUpdateBannerDismissed = false;
+            OnPropertyChanged(nameof(HasUpdateBanner));
+        }
+
+        if (_isCheckingForUpdate)
+        {
+            return;
+        }
+
+        _isCheckingForUpdate = true;
+        try
+        {
+            string? newerVersion = await _platformService.CheckForUpdateAsync(currentVersion);
+            if (!string.IsNullOrWhiteSpace(newerVersion))
+            {
+                _isUpdateBannerDismissed = false;
+                UpdateAvailableVersion = newerVersion;
+                OnPropertyChanged(nameof(HasUpdateBanner));
+            }
+        }
+        catch
+        {
+            // Ignore any update check failure when offline
+        }
+        finally
+        {
+            _isCheckingForUpdate = false;
+        }
+    }
+
+    public Task OpenStoreUpdateAsync() => _platformService.OpenStoreUpdateAsync();
 
     // Global Profile Settings
     public int BarbellWeight
