@@ -88,7 +88,7 @@ public class DevicePlatformService
         }
 
         var builder = new Android.App.PictureInPictureParams.Builder();
-        builder.SetAspectRatio(new Android.Util.Rational(19, 8));
+        builder.SetAspectRatio(new Android.Util.Rational(239, 100));
 
         if (OperatingSystem.IsAndroidVersionAtLeast(31))
         {

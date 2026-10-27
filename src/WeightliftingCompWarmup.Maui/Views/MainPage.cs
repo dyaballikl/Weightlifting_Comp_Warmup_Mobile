@@ -104,7 +104,7 @@ public class MainPage : ContentPage
     {
         var stepLabel = new Label
         {
-            FontSize = 14,
+            FontSize = 11.5,
             FontAttributes = FontAttributes.Bold,
             FontAutoScalingEnabled = false,
             TextColor = Color.FromArgb("#F8FAFC"),
@@ -116,7 +116,7 @@ public class MainPage : ContentPage
 
         var remainingLabel = new Label
         {
-            FontSize = 26,
+            FontSize = 20,
             FontAttributes = FontAttributes.Bold,
             FontAutoScalingEnabled = false,
             TextColor = Color.FromArgb("#FACC15"),
@@ -130,7 +130,8 @@ public class MainPage : ContentPage
         {
             ProgressColor = Color.FromArgb("#16A34A"),
             BackgroundColor = Color.FromArgb("#1E293B"),
-            HeightRequest = 4,
+            HeightRequest = 3,
+            Margin = new Thickness(10, 0, 10, 2),
             VerticalOptions = LayoutOptions.End
         };
         progressBar.SetBinding(ProgressBar.ProgressProperty, nameof(MainViewModel.LiveActiveStepProgress));
@@ -140,14 +141,14 @@ public class MainPage : ContentPage
             RowDefinitions =
             {
                 new RowDefinition { Height = GridLength.Star },
-                new RowDefinition { Height = new GridLength(4) }
+                new RowDefinition { Height = new GridLength(5) }
             }
         };
 
         contentGrid.Add(new VerticalStackLayout
         {
-            Padding = new Thickness(8, 4),
-            Spacing = 1,
+            Padding = new Thickness(6, 2),
+            Spacing = 0,
             VerticalOptions = LayoutOptions.Center,
             HorizontalOptions = LayoutOptions.Fill,
             Children =
@@ -164,8 +165,7 @@ public class MainPage : ContentPage
             IsVisible = false,
             ZIndex = 200,
             BackgroundColor = Color.FromArgb("#0F172A"),
-            Stroke = new SolidColorBrush(Color.FromArgb("#FACC15")),
-            StrokeThickness = 2,
+            StrokeThickness = 0,
             Padding = 0,
             Content = contentGrid
         };

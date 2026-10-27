@@ -12,8 +12,15 @@ namespace WeightliftingCompWarmup.Maui;
     MainLauncher = true,
     LaunchMode = LaunchMode.SingleTop,
     SupportsPictureInPicture = true,
+    ResizeableActivity = true,
     ConfigurationChanges = ConfigChanges.ScreenSize | ConfigChanges.Orientation | ConfigChanges.UiMode |
                            ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.Density)]
+[Layout(
+    DefaultWidth = "144dp",
+    DefaultHeight = "60dp",
+    MinWidth = "120dp",
+    MinHeight = "50dp",
+    Gravity = "bottom|end")]
 public class MainActivity : MauiAppCompatActivity
 {
     protected override void OnUserLeaveHint()

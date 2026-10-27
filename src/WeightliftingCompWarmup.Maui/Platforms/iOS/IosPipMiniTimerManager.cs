@@ -298,25 +298,22 @@ public sealed class IosPipMiniTimerManager : NSObject, IAVPictureInPictureContro
                     UIColor.FromRGB(15, 23, 42).SetFill();
                     context.FillRect(new CGRect(0, 0, FrameWidth, FrameHeight));
 
-                    // 2. Bottom progress bar track (#1E293B) and active green fill (#16A34A)
-                    nfloat barHeight = 8f;
-                    nfloat barY = FrameHeight - barHeight;
+                    // 2. Bottom progress bar track (#1E293B) and active green fill (#16A34A), inset from corners
+                    nfloat barInsetX = 24f;
+                    nfloat barHeight = 6f;
+                    nfloat barY = FrameHeight - barHeight - 6f;
+                    nfloat barTrackWidth = FrameWidth - (barInsetX * 2f);
                     UIColor.FromRGB(30, 41, 59).SetFill();
-                    context.FillRect(new CGRect(0, barY, FrameWidth, barHeight));
+                    context.FillRect(new CGRect(barInsetX, barY, barTrackWidth, barHeight));
 
-                    nfloat fillWidth = (nfloat)(FrameWidth * Math.Clamp(progress, 0.0, 1.0));
+                    nfloat fillWidth = (nfloat)(barTrackWidth * Math.Clamp(progress, 0.0, 1.0));
                     if (fillWidth > 0)
                     {
                         UIColor.FromRGB(22, 163, 74).SetFill();
-                        context.FillRect(new CGRect(0, barY, fillWidth, barHeight));
+                        context.FillRect(new CGRect(barInsetX, barY, fillWidth, barHeight));
                     }
 
-                    // 3. Gold outer border (#FACC15)
-                    UIColor.FromRGB(250, 204, 21).SetStroke();
-                    context.SetLineWidth(4f);
-                    context.StrokeRect(new CGRect(2, 2, FrameWidth - 4, FrameHeight - 4));
-
-                    // 4. Step Description (Top line, bold white #F8FAFC)
+                    // 3. Step Description (Top line, bold white #F8FAFC)
                     var paragraphStyle = new NSMutableParagraphStyle
                     {
                         Alignment = UITextAlignment.Center,
@@ -331,18 +328,18 @@ public sealed class IosPipMiniTimerManager : NSObject, IAVPictureInPictureContro
                     };
 
                     using var nsStep = new NSString(stepDescription);
-                    nsStep.DrawString(new CGRect(14, 22, FrameWidth - 28, 36), stepAttrs);
+                    nsStep.DrawString(new CGRect(14, 24, FrameWidth - 28, 36), stepAttrs);
 
-                    // 5. Remaining Time ("xhxmxs", large bold gold #FACC15)
+                    // 4. Remaining Time ("xhxmxs", large bold gold #FACC15)
                     var timeAttrs = new UIStringAttributes
                     {
-                        Font = UIFont.BoldSystemFontOfSize(52f),
+                        Font = UIFont.BoldSystemFontOfSize(50f),
                         ForegroundColor = UIColor.FromRGB(250, 204, 21),
                         ParagraphStyle = paragraphStyle
                     };
 
                     using var nsTime = new NSString(remainingText);
-                    nsTime.DrawString(new CGRect(12, 64, FrameWidth - 24, 68), timeAttrs);
+                    nsTime.DrawString(new CGRect(12, 66, FrameWidth - 24, 66), timeAttrs);
                 }
                 finally
                 {
