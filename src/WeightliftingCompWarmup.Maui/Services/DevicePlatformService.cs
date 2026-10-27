@@ -162,12 +162,22 @@ public class DevicePlatformService
     /// <summary>
     /// Updates the rendered frame for the Android/iOS floating mini-timer.
     /// </summary>
-    public void UpdateLiveMiniTimerFrame(string stepDescription, string remainingText, double progress)
+    public void UpdateLiveMiniTimerFrame(
+        string stepDescription,
+        string remainingText,
+        double progress,
+        int liftWeightKg = 0,
+        int barWeightKg = 20)
     {
 #if ANDROID
         try
         {
-            AndroidFloatingTimerOverlay.Shared.UpdateState(stepDescription, remainingText, progress);
+            AndroidFloatingTimerOverlay.Shared.UpdateState(
+                stepDescription,
+                remainingText,
+                progress,
+                liftWeightKg,
+                barWeightKg);
         }
         catch
         {
@@ -181,7 +191,12 @@ public class DevicePlatformService
 
         try
         {
-            Platforms.iOS.IosPipMiniTimerManager.Shared.UpdateFrame(stepDescription, remainingText, progress);
+            Platforms.iOS.IosPipMiniTimerManager.Shared.UpdateFrame(
+                stepDescription,
+                remainingText,
+                progress,
+                liftWeightKg,
+                barWeightKg);
         }
         catch
         {
@@ -209,9 +224,9 @@ public class DevicePlatformService
         try
         {
             var builder = new Android.App.AlertDialog.Builder(activity);
-            builder.SetTitle("Enable Compact Floating Timer");
+            builder.SetTitle("Enable Floating Timer");
             builder.SetMessage(
-                "To display a compact Samsung Clock-style floating pill over your home screen instead of Android's large Picture-in-Picture box, allow Comp OWL to 'Appear on top' on the next screen.");
+                "To enable the timer to display on your screen if you switch away from the app, allow Comp OWL to 'Appear on top' on the next screen.");
             builder.SetPositiveButton("Open Settings", (_, _) =>
             {
                 try
@@ -228,7 +243,15 @@ public class DevicePlatformService
                 }
             });
             builder.SetNegativeButton("Not Now", (_, _) => { });
-            builder.Show();
+            var dialog = builder.Create();
+            if (dialog != null)
+            {
+                dialog.Show();
+                dialog.GetButton((int)Android.Content.DialogButtonType.Positive)
+                    ?.SetTextColor(Android.Graphics.Color.ParseColor("#38BDF8"));
+                dialog.GetButton((int)Android.Content.DialogButtonType.Negative)
+                    ?.SetTextColor(Android.Graphics.Color.ParseColor("#E2E8F0"));
+            }
         }
         catch
         {

@@ -8,6 +8,7 @@ using CoreMedia;
 using CoreVideo;
 using Foundation;
 using UIKit;
+using WeightliftingCompWarmup.Core.Services;
 using WeightliftingCompWarmup.Maui.Services;
 
 namespace WeightliftingCompWarmup.Maui.Platforms.iOS;
@@ -32,6 +33,8 @@ public sealed class IosPipMiniTimerManager : NSObject, IAVPictureInPictureContro
     private string _lastStepDescription = "Wait to start";
     private string _lastRemainingText = "0s";
     private double _lastProgress;
+    private int _lastLiftWeightKg;
+    private int _lastBarWeightKg = 20;
 
     private IosPipMiniTimerManager()
     {
@@ -80,11 +83,13 @@ public sealed class IosPipMiniTimerManager : NSObject, IAVPictureInPictureContro
         }
     }
 
-    public void UpdateFrame(string stepDescription, string remainingText, double progress)
+    public void UpdateFrame(string stepDescription, string remainingText, double progress, int liftWeightKg = 0, int barWeightKg = 20)
     {
         _lastStepDescription = string.IsNullOrWhiteSpace(stepDescription) ? "Wait to start" : stepDescription;
         _lastRemainingText = string.IsNullOrWhiteSpace(remainingText) ? "0s" : remainingText;
         _lastProgress = Math.Clamp(progress, 0.0, 1.0);
+        _lastLiftWeightKg = Math.Max(0, liftWeightKg);
+        _lastBarWeightKg = barWeightKg > 0 ? barWeightKg : 20;
 
         if (!_isEnabled)
         {
@@ -313,10 +318,29 @@ public sealed class IosPipMiniTimerManager : NSObject, IAVPictureInPictureContro
                         context.FillRect(new CGRect(barInsetX, barY, fillWidth, barHeight));
                     }
 
-                    // 3. Step Description (Top line, bold white #F8FAFC)
+                    // 3. Simplified plate rectangles on the right when a lift step has loaded plates
+                    nfloat platesTotalWidth = 0f;
+                    var loadout = (_lastLiftWeightKg > _lastBarWeightKg)
+                        ? BarbellLoadCalculator.Calculate(_lastLiftWeightKg, _lastBarWeightKg, isOpener: false)
+                        : null;
+                    var sleeveElements = loadout?.SleeveElements.Where(e => !e.IsCollar).ToList();
+                    if (sleeveElements != null && sleeveElements.Count > 0)
+                    {
+                        foreach (var plate in sleeveElements)
+                        {
+                            bool isBigPlate = plate.WeightKg >= 10.0m || plate.HeightRatio >= 0.99;
+                            platesTotalWidth += (isBigPlate ? 16f : 8f) + 3f;
+                        }
+                    }
+
+                    nfloat textAreaWidth = platesTotalWidth > 0
+                        ? FrameWidth - platesTotalWidth - 36f
+                        : FrameWidth - 28f;
+
+                    // 4. Step Description (Top line, bold white #F8FAFC)
                     var paragraphStyle = new NSMutableParagraphStyle
                     {
-                        Alignment = UITextAlignment.Center,
+                        Alignment = platesTotalWidth > 0 ? UITextAlignment.Left : UITextAlignment.Center,
                         LineBreakMode = UILineBreakMode.TailTruncation
                     };
 
@@ -328,9 +352,9 @@ public sealed class IosPipMiniTimerManager : NSObject, IAVPictureInPictureContro
                     };
 
                     using var nsStep = new NSString(stepDescription);
-                    nsStep.DrawString(new CGRect(14, 24, FrameWidth - 28, 36), stepAttrs);
+                    nsStep.DrawString(new CGRect(18, 24, textAreaWidth, 36), stepAttrs);
 
-                    // 4. Remaining Time ("xhxmxs", large bold gold #FACC15)
+                    // 5. Remaining Time ("xhxmxs", large bold gold #FACC15)
                     var timeAttrs = new UIStringAttributes
                     {
                         Font = UIFont.BoldSystemFontOfSize(50f),
@@ -339,7 +363,28 @@ public sealed class IosPipMiniTimerManager : NSObject, IAVPictureInPictureContro
                     };
 
                     using var nsTime = new NSString(remainingText);
-                    nsTime.DrawString(new CGRect(12, 66, FrameWidth - 24, 66), timeAttrs);
+                    nsTime.DrawString(new CGRect(18, 66, textAreaWidth, 66), timeAttrs);
+
+                    // Draw plate stack to the right of the text
+                    if (platesTotalWidth > 0 && sleeveElements != null)
+                    {
+                        nfloat plateX = FrameWidth - platesTotalWidth - 16f;
+                        nfloat centerY = 76f;
+                        foreach (var plate in sleeveElements)
+                        {
+                            bool isBigPlate = plate.WeightKg >= 10.0m || plate.HeightRatio >= 0.99;
+                            nfloat w = isBigPlate ? 16f : 8f;
+                            nfloat h = isBigPlate ? 56f : 38f;
+                            nfloat y = centerY - (h / 2f);
+
+                            ParseHexColor(plate.HexColor).SetFill();
+                            var rect = new CGRect(plateX, y, w, h);
+                            var path = UIBezierPath.FromRoundedRect(rect, 3f);
+                            path.Fill();
+
+                            plateX += w + 3f;
+                        }
+                    }
                 }
                 finally
                 {
@@ -433,6 +478,19 @@ public sealed class IosPipMiniTimerManager : NSObject, IAVPictureInPictureContro
     public void SkipByInterval(AVPictureInPictureController pictureInPictureController, CMTime skipInterval, Action completionHandler)
     {
         completionHandler?.Invoke();
+    }
+
+    private static UIColor ParseHexColor(string? hex)
+    {
+        if (!string.IsNullOrWhiteSpace(hex) && hex.StartsWith('#') && hex.Length == 7 &&
+            byte.TryParse(hex.AsSpan(1, 2), System.Globalization.NumberStyles.HexNumber, null, out byte r) &&
+            byte.TryParse(hex.AsSpan(3, 2), System.Globalization.NumberStyles.HexNumber, null, out byte g) &&
+            byte.TryParse(hex.AsSpan(5, 2), System.Globalization.NumberStyles.HexNumber, null, out byte b))
+        {
+            return UIColor.FromRGB(r, g, b);
+        }
+
+        return UIColor.White;
     }
 }
 #endif

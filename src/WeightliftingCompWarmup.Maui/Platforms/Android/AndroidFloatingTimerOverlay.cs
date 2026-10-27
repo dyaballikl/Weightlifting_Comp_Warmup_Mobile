@@ -10,6 +10,7 @@ using Android.Text;
 using Android.Util;
 using Android.Views;
 using Android.Widget;
+using WeightliftingCompWarmup.Core.Services;
 using AApplication = Android.App.Application;
 using AColor = Android.Graphics.Color;
 using AView = Android.Views.View;
@@ -17,17 +18,25 @@ using AView = Android.Views.View;
 namespace WeightliftingCompWarmup.Maui.Services;
 
 /// <summary>
-/// Renders a compact, draggable, pill-shaped floating mini-timer overlay over the Android home screen
-/// (matching the size and capsule style of Samsung Clock's floating mini-timer) using
+/// Renders a compact, draggable floating mini-timer overlay on Android using
 /// <see cref="IWindowManager"/> and <see cref="WindowManagerTypes.ApplicationOverlay"/>.
+/// Displays the active step description, remaining countdown, simplified IWF plate stack
+/// (when the active step is a lift), and progress bar.
 /// </summary>
 public sealed class AndroidFloatingTimerOverlay
 {
-    private const int PillWidthDp = 172;
+    private const int PillWidthDp = 184;
     private const int PillHeightDp = 58;
     private const int PillCornerRadiusDp = 29;
-    private const int ProgressBarTrackWidthDp = 112;
+    private const int ProgressBarTrackWidthDp = 124;
     private const int ProgressBarHeightDp = 3;
+
+    // Plate rectangle dimensions: big plates are single-width (8dp) normal-height (28dp);
+    // change plates are half-width (4dp) and 2/3 height (~19dp).
+    private const float BigPlateWidthDp = 8.0f;
+    private const float BigPlateHeightDp = 28.0f;
+    private const float ChangePlateWidthDp = 4.0f;
+    private const float ChangePlateHeightDp = 18.67f;
 
     public static AndroidFloatingTimerOverlay Shared { get; } = new();
 
@@ -37,11 +46,17 @@ public sealed class AndroidFloatingTimerOverlay
     private LinearLayout? _rootPillView;
     private TextView? _stepTextView;
     private TextView? _remainingTextView;
+    private LinearLayout? _platesRow;
     private AView? _progressFillView;
 
     private string _stepDescription = "Wait to start";
     private string _remainingText = "0s";
     private double _progressFraction;
+    private int _liftWeightKg;
+    private int _barWeightKg = 20;
+    private int _lastRenderedLiftWeightKg = -1;
+    private int _lastRenderedBarWeightKg = -1;
+    private float _density = 2.75f;
     private bool _isShowing;
     private bool _tickScheduled;
     private int _trackWidthPx;
@@ -70,11 +85,18 @@ public sealed class AndroidFloatingTimerOverlay
         }
     }
 
-    public void UpdateState(string stepDescription, string remainingText, double progressFraction)
+    public void UpdateState(
+        string stepDescription,
+        string remainingText,
+        double progressFraction,
+        int liftWeightKg = 0,
+        int barWeightKg = 20)
     {
         _stepDescription = string.IsNullOrWhiteSpace(stepDescription) ? "Live Warmup" : stepDescription.Trim();
         _remainingText = string.IsNullOrWhiteSpace(remainingText) ? "0s" : remainingText.Trim();
         _progressFraction = Math.Clamp(progressFraction, 0.0, 1.0);
+        _liftWeightKg = Math.Max(0, liftWeightKg);
+        _barWeightKg = barWeightKg > 0 ? barWeightKg : 20;
 
         if (!_isShowing)
         {
@@ -107,10 +129,12 @@ public sealed class AndroidFloatingTimerOverlay
                 return false;
             }
 
-            float density = ctx.Resources?.DisplayMetrics?.Density ?? 2.75f;
-            int widthPx = DpToPx(PillWidthDp, density);
-            int heightPx = DpToPx(PillHeightDp, density);
-            _trackWidthPx = DpToPx(ProgressBarTrackWidthDp, density);
+            _density = ctx.Resources?.DisplayMetrics?.Density ?? 2.75f;
+            int widthPx = DpToPx(PillWidthDp, _density);
+            int heightPx = DpToPx(PillHeightDp, _density);
+            _trackWidthPx = DpToPx(ProgressBarTrackWidthDp, _density);
+            _lastRenderedLiftWeightKg = -1;
+            _lastRenderedBarWeightKg = -1;
 
             var windowType = OperatingSystem.IsAndroidVersionAtLeast(26)
                 ? WindowManagerTypes.ApplicationOverlay
@@ -126,15 +150,15 @@ public sealed class AndroidFloatingTimerOverlay
                 Format.Translucent)
             {
                 Gravity = GravityFlags.Bottom | GravityFlags.End,
-                X = DpToPx(16, density),
-                Y = DpToPx(92, density)
+                X = DpToPx(16, _density),
+                Y = DpToPx(92, _density)
             };
 
-            _rootPillView = BuildPillView(ctx, density);
+            _rootPillView = BuildPillView(ctx, _density);
+            _isShowing = true;
             ApplyTextAndProgressToViews();
 
             _windowManager.AddView(_rootPillView, _layoutParams);
-            _isShowing = true;
             StartBackgroundTickLoop();
             return true;
         }
@@ -172,7 +196,10 @@ public sealed class AndroidFloatingTimerOverlay
             _rootPillView = null;
             _stepTextView = null;
             _remainingTextView = null;
+            _platesRow = null;
             _progressFillView = null;
+            _lastRenderedLiftWeightKg = -1;
+            _lastRenderedBarWeightKg = -1;
         }
     }
 
@@ -195,6 +222,21 @@ public sealed class AndroidFloatingTimerOverlay
             DpToPx(6, density),
             DpToPx(10, density),
             DpToPx(6, density));
+
+        var leftColumn = new LinearLayout(ctx)
+        {
+            Orientation = Orientation.Vertical
+        };
+        leftColumn.SetGravity(GravityFlags.CenterVertical);
+        var leftColParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f);
+
+        // Top row above the progress bar: step/countdown text on the left, loaded plate rectangles on the right
+        var topRow = new LinearLayout(ctx)
+        {
+            Orientation = Orientation.Horizontal
+        };
+        topRow.SetGravity(GravityFlags.CenterVertical);
+        var topRowParams = new LinearLayout.LayoutParams(_trackWidthPx, ViewGroup.LayoutParams.WrapContent);
 
         var textColumn = new LinearLayout(ctx)
         {
@@ -223,6 +265,25 @@ public sealed class AndroidFloatingTimerOverlay
         _remainingTextView.SetTextColor(AColor.ParseColor("#FACC15"));
         _remainingTextView.SetTextSize(ComplexUnitType.Dip, 17.5f);
         _remainingTextView.SetIncludeFontPadding(false);
+
+        textColumn.AddView(_stepTextView);
+        textColumn.AddView(_remainingTextView);
+
+        _platesRow = new LinearLayout(ctx)
+        {
+            Orientation = Orientation.Horizontal,
+            Visibility = ViewStates.Gone
+        };
+        _platesRow.SetGravity(GravityFlags.CenterVertical);
+        var platesRowParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WrapContent,
+            ViewGroup.LayoutParams.WrapContent)
+        {
+            LeftMargin = DpToPx(6, density)
+        };
+
+        topRow.AddView(textColumn, textColParams);
+        topRow.AddView(_platesRow, platesRowParams);
 
         int barHeightPx = Math.Max(2, DpToPx(ProgressBarHeightDp, density));
         float barRadiusPx = barHeightPx / 2f;
@@ -256,9 +317,8 @@ public sealed class AndroidFloatingTimerOverlay
         };
         progressTrack.AddView(_progressFillView, fillParams);
 
-        textColumn.AddView(_stepTextView);
-        textColumn.AddView(_remainingTextView);
-        textColumn.AddView(progressTrack, trackParams);
+        leftColumn.AddView(topRow, topRowParams);
+        leftColumn.AddView(progressTrack, trackParams);
 
         int closeSizePx = DpToPx(26, density);
         var closeBg = new GradientDrawable();
@@ -278,7 +338,7 @@ public sealed class AndroidFloatingTimerOverlay
 
         var closeParams = new LinearLayout.LayoutParams(closeSizePx, closeSizePx)
         {
-            LeftMargin = DpToPx(6, density)
+            LeftMargin = DpToPx(8, density)
         };
 
         closeBtn.Click += (_, _) =>
@@ -286,7 +346,7 @@ public sealed class AndroidFloatingTimerOverlay
             Hide();
         };
 
-        root.AddView(textColumn, textColParams);
+        root.AddView(leftColumn, leftColParams);
         root.AddView(closeBtn, closeParams);
 
         root.SetOnTouchListener(new PillDragTouchListener(this, density));
@@ -322,11 +382,88 @@ public sealed class AndroidFloatingTimerOverlay
                     _progressFillView.LayoutParameters = lp;
                 }
             }
+
+            if (_liftWeightKg != _lastRenderedLiftWeightKg || _barWeightKg != _lastRenderedBarWeightKg)
+            {
+                _lastRenderedLiftWeightKg = _liftWeightKg;
+                _lastRenderedBarWeightKg = _barWeightKg;
+                RebuildPlateViews();
+            }
         }
         catch
         {
             // Ignore transient UI update errors
         }
+    }
+
+    private void RebuildPlateViews()
+    {
+        if (_platesRow == null)
+        {
+            return;
+        }
+
+        var ctx = _platesRow.Context;
+        if (ctx == null)
+        {
+            return;
+        }
+
+        _platesRow.RemoveAllViews();
+
+        if (_liftWeightKg <= 0 || _barWeightKg <= 0 || _liftWeightKg <= _barWeightKg)
+        {
+            _platesRow.Visibility = ViewStates.Gone;
+            return;
+        }
+
+        var loadout = BarbellLoadCalculator.Calculate(_liftWeightKg, _barWeightKg, isOpener: false);
+        var plates = loadout.SleeveElements.Where(e => !e.IsCollar).ToList();
+        if (plates.Count == 0)
+        {
+            _platesRow.Visibility = ViewStates.Gone;
+            return;
+        }
+
+        // Slightly compact width if 5+ plates per side are loaded so it always fits comfortably
+        float widthScale = plates.Count >= 5 ? 0.82f : 1.0f;
+        int bigW = Math.Max(4, DpToPx(BigPlateWidthDp * widthScale, _density));
+        int bigH = DpToPx(BigPlateHeightDp, _density);
+        int changeW = Math.Max(2, DpToPx(ChangePlateWidthDp * widthScale, _density));
+        int changeH = DpToPx(ChangePlateHeightDp, _density);
+        int gapPx = Math.Max(1, DpToPx(1.2f, _density));
+        int strokePx = Math.Max(1, DpToPx(0.8f, _density));
+
+        for (int i = 0; i < plates.Count; i++)
+        {
+            var plate = plates[i];
+            bool isBigPlate = plate.WeightKg >= 10.0m || plate.HeightRatio >= 0.99;
+
+            int w = isBigPlate ? bigW : changeW;
+            int h = isBigPlate ? bigH : changeH;
+            float radiusPx = DpToPx(isBigPlate ? 2.0f : 1.5f, _density);
+
+            var plateDrawable = new GradientDrawable();
+            plateDrawable.SetShape(ShapeType.Rectangle);
+            plateDrawable.SetCornerRadius(radiusPx);
+            plateDrawable.SetColor(AColor.ParseColor(plate.HexColor));
+            plateDrawable.SetStroke(strokePx, AColor.ParseColor(plate.BorderHexColor));
+
+            var plateView = new AView(ctx)
+            {
+                Background = plateDrawable
+            };
+
+            var plateParams = new LinearLayout.LayoutParams(w, h)
+            {
+                Gravity = GravityFlags.CenterVertical,
+                LeftMargin = i > 0 ? gapPx : 0
+            };
+
+            _platesRow.AddView(plateView, plateParams);
+        }
+
+        _platesRow.Visibility = ViewStates.Visible;
     }
 
     private void UpdateDragOffset(int deltaRawX, int deltaRawY, int startX, int startY)
@@ -382,8 +519,11 @@ public sealed class AndroidFloatingTimerOverlay
                         0,
                         intent,
                         PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
-                    pendingIntent?.Send(ctx, 0, null, null, null, null, options.ToBundle());
-                    launched = true;
+                    if (pendingIntent != null)
+                    {
+                        pendingIntent.Send(ctx, 0, null, null, null, null, options.ToBundle());
+                        launched = true;
+                    }
                 }
                 catch
                 {

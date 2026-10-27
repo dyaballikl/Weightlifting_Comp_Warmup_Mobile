@@ -1789,10 +1789,16 @@ public class MainViewModel : INotifyPropertyChanged
             LiveActiveStepProgress = 0.0;
         }
 
+        int activeLiftWeightKg = (activeStep != null && activeStep.IsLift && activeStep.WeightKg > 0)
+            ? activeStep.WeightKg
+            : 0;
+
         _platformService.UpdateLiveMiniTimerFrame(
             LiveActiveStepDescription,
             LiveActiveStepRemaining,
-            LiveActiveStepProgress);
+            LiveActiveStepProgress,
+            activeLiftWeightKg,
+            ActiveProfile.BarbellWeight);
 
         if (snapshot.TriggerBeep)
         {
