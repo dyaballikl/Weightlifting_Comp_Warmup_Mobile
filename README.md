@@ -5,7 +5,7 @@
 
   **Competition Olympic WeightLifting Warmup Timer & Plate Calculator for Android & iOS**
 
-  [![Version](https://img.shields.io/badge/version-2.0.21%20(build%2023)-38BDF8?style=flat-square)](./src/WeightliftingCompWarmup.Maui/WeightliftingCompWarmup.Maui.csproj)
+  [![Version](https://img.shields.io/badge/version-2.0.23%20(build%2025)-38BDF8?style=flat-square)](./src/WeightliftingCompWarmup.Maui/WeightliftingCompWarmup.Maui.csproj)
   [![Platform](https://img.shields.io/badge/platform-Android%20%7C%20iOS%20(.NET%2010%20MAUI)-4ADE80?style=flat-square)](./src/WeightliftingCompWarmup.Maui)
   [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-FBBF24?style=flat-square)](./LICENSE)
   [![100% Offline](https://img.shields.io/badge/offline-100%25%20local%20%26%20ad--free-A855F7?style=flat-square)](./PRIVACY.md)
@@ -20,7 +20,7 @@
 
 Enter your lifter's **Snatch** or **Clean & Jerk** opener, barbell type, weight-jump rules, and rest timing, and Comp OWL works backward from platform time to generate a complete, step-by-step warmup schedule with color-coded IWF barbell loading and live countdown clocks.
 
-- **Current Release:** `v2.0.21` (Build `23`)
+- **Current Release:** `v2.0.23` (Build `25`)
 - **Created by:** Matt Cunningham ([@lifting_while_diabetic](https://www.instagram.com/lifting_while_diabetic/) on Instagram)
 
 ---

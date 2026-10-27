@@ -29,6 +29,12 @@ public class MainActivity : MauiAppCompatActivity
         DevicePlatformService.TryEnterMiniTimerPip(this);
     }
 
+    protected override void OnStop()
+    {
+        base.OnStop();
+        DevicePlatformService.OnAndroidActivityStopped(this);
+    }
+
     public override void OnPictureInPictureModeChanged(bool isInPictureInPictureMode, Configuration? newConfig)
     {
         if (OperatingSystem.IsAndroidVersionAtLeast(26))
@@ -41,6 +47,8 @@ public class MainActivity : MauiAppCompatActivity
     protected override void OnResume()
     {
         base.OnResume();
+        AndroidFloatingTimerOverlay.Shared.Hide();
+        DevicePlatformService.RefreshAndroidMiniTimerState(this);
         if (OperatingSystem.IsAndroidVersionAtLeast(26) && !IsInPictureInPictureMode)
         {
             DevicePlatformService.NotifyPipModeChanged(false);

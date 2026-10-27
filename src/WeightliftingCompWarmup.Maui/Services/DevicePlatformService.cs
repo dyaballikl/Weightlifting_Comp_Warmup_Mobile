@@ -28,6 +28,23 @@ public class DevicePlatformService
     public static bool IsLiveMiniTimerActive { get; private set; }
     public static bool IsInPipMode { get; private set; }
     public static event Action<bool>? PipModeChanged;
+    public static event Action? BackgroundOverlayTick;
+
+#if ANDROID
+    private static bool _hasPromptedOverlayPermissionThisSession;
+#endif
+
+    public static void RaiseBackgroundOverlayTick()
+    {
+        try
+        {
+            BackgroundOverlayTick?.Invoke();
+        }
+        catch
+        {
+            // Ignore background tick listener exceptions
+        }
+    }
 
     /// <summary>
     /// Returns <c>true</c> only when the app was installed from the Google Play Store on Android
@@ -114,7 +131,19 @@ public class DevicePlatformService
 #if ANDROID
         try
         {
-            MainThread.BeginInvokeOnMainThread(() => UpdateAndroidPipParams(enabled));
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                if (!enabled)
+                {
+                    AndroidFloatingTimerOverlay.Shared.Hide();
+                }
+                else
+                {
+                    PromptAndroidOverlayPermissionIfNeeded();
+                }
+
+                UpdateAndroidPipParams(enabled);
+            });
         }
         catch
         {
@@ -133,11 +162,20 @@ public class DevicePlatformService
     }
 
     /// <summary>
-    /// Updates the rendered frame for the iOS Picture-in-Picture floating mini-timer.
+    /// Updates the rendered frame for the Android/iOS floating mini-timer.
     /// </summary>
     public void UpdateLiveMiniTimerFrame(string stepDescription, string remainingText, double progress)
     {
-#if IOS
+#if ANDROID
+        try
+        {
+            AndroidFloatingTimerOverlay.Shared.UpdateState(stepDescription, remainingText, progress);
+        }
+        catch
+        {
+            // Ignore in headless/unit test environments
+        }
+#elif IOS
         if (!IsLiveMiniTimerActive)
         {
             return;
@@ -155,6 +193,51 @@ public class DevicePlatformService
     }
 
 #if ANDROID
+    private static void PromptAndroidOverlayPermissionIfNeeded()
+    {
+        if (_hasPromptedOverlayPermissionThisSession || AndroidFloatingTimerOverlay.CanDrawOverlays())
+        {
+            return;
+        }
+
+        var activity = Microsoft.Maui.ApplicationModel.Platform.CurrentActivity;
+        if (activity == null || activity.IsFinishing)
+        {
+            return;
+        }
+
+        _hasPromptedOverlayPermissionThisSession = true;
+
+        try
+        {
+            var builder = new Android.App.AlertDialog.Builder(activity);
+            builder.SetTitle("Enable Compact Floating Timer");
+            builder.SetMessage(
+                "To display a compact Samsung Clock-style floating pill over your home screen instead of Android's large Picture-in-Picture box, allow Comp OWL to 'Appear on top' on the next screen.");
+            builder.SetPositiveButton("Open Settings", (_, _) =>
+            {
+                try
+                {
+                    string pkg = activity.PackageName ?? DefaultPackageId;
+                    var intent = new Android.Content.Intent(
+                        Android.Provider.Settings.ActionManageOverlayPermission,
+                        Android.Net.Uri.Parse($"package:{pkg}"));
+                    activity.StartActivity(intent);
+                }
+                catch
+                {
+                    // Ignore if settings intent cannot be launched
+                }
+            });
+            builder.SetNegativeButton("Not Now", (_, _) => { });
+            builder.Show();
+        }
+        catch
+        {
+            // Ignore if dialog cannot be shown
+        }
+    }
+
     public static Android.App.PictureInPictureParams? BuildPipParams(bool autoEnterEnabled)
     {
         if (!OperatingSystem.IsAndroidVersionAtLeast(26))
@@ -162,19 +245,23 @@ public class DevicePlatformService
             return null;
         }
 
+        // When "Appear on top" permission is granted, we use the compact AndroidFloatingTimerOverlay pill
+        // instead of Android's video Picture-in-Picture container.
+        bool usePip = autoEnterEnabled && !AndroidFloatingTimerOverlay.CanDrawOverlays();
+
         var builder = new Android.App.PictureInPictureParams.Builder();
-        builder.SetAspectRatio(new Android.Util.Rational(239, 100));
+        builder.SetAspectRatio(new Android.Util.Rational(135, 100));
 
         if (OperatingSystem.IsAndroidVersionAtLeast(31))
         {
-            builder.SetAutoEnterEnabled(autoEnterEnabled);
+            builder.SetAutoEnterEnabled(usePip);
             builder.SetSeamlessResizeEnabled(true);
         }
 
         return builder.Build();
     }
 
-    private static void UpdateAndroidPipParams(bool enabled)
+    public static void RefreshAndroidMiniTimerState(Android.App.Activity activity)
     {
         if (!OperatingSystem.IsAndroidVersionAtLeast(26))
         {
@@ -183,14 +270,10 @@ public class DevicePlatformService
 
         try
         {
-            var activity = Microsoft.Maui.ApplicationModel.Platform.CurrentActivity;
-            if (activity != null)
+            var pipParams = BuildPipParams(IsLiveMiniTimerActive);
+            if (pipParams != null)
             {
-                var pipParams = BuildPipParams(enabled);
-                if (pipParams != null)
-                {
-                    activity.SetPictureInPictureParams(pipParams);
-                }
+                activity.SetPictureInPictureParams(pipParams);
             }
         }
         catch
@@ -199,9 +282,44 @@ public class DevicePlatformService
         }
     }
 
+    private static void UpdateAndroidPipParams(bool enabled)
+    {
+        var activity = Microsoft.Maui.ApplicationModel.Platform.CurrentActivity;
+        if (activity != null)
+        {
+            RefreshAndroidMiniTimerState(activity);
+        }
+    }
+
+    public static void OnAndroidActivityStopped(Android.App.Activity activity)
+    {
+        if (!IsLiveMiniTimerActive)
+        {
+            AndroidFloatingTimerOverlay.Shared.Hide();
+            return;
+        }
+
+        if (AndroidFloatingTimerOverlay.CanDrawOverlays(activity))
+        {
+            AndroidFloatingTimerOverlay.Shared.Show(activity);
+        }
+    }
+
     public static void TryEnterMiniTimerPip(Android.App.Activity activity)
     {
-        if (!IsLiveMiniTimerActive || !OperatingSystem.IsAndroidVersionAtLeast(26))
+        if (!IsLiveMiniTimerActive)
+        {
+            AndroidFloatingTimerOverlay.Shared.Hide();
+            return;
+        }
+
+        if (AndroidFloatingTimerOverlay.CanDrawOverlays(activity))
+        {
+            AndroidFloatingTimerOverlay.Shared.Show(activity);
+            return;
+        }
+
+        if (!OperatingSystem.IsAndroidVersionAtLeast(26))
         {
             return;
         }

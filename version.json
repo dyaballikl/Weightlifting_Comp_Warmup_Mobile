@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.0.21",
-  "latestBuild": 23,
-  "androidLatestVersion": "2.0.21",
-  "iosLatestVersion": "2.0.21",
+  "latestVersion": "2.0.23",
+  "latestBuild": 25,
+  "androidLatestVersion": "2.0.23",
+  "iosLatestVersion": "2.0.23",
   "storeUrlAndroid": "https://play.google.com/store/apps/details?id=com.weightlifting.compwarmup",
   "storeUrlIos": ""
 }

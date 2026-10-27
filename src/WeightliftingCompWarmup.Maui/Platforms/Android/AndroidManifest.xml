@@ -11,6 +11,9 @@
   <!-- Required for keeping screen awake during Live Warmup -->
   <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+  <!-- Required for the compact Samsung Clock-style floating mini-timer pill over the home screen -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
   <!-- Explicit support for both Phones and Tablets (small through xlarge screens) -->
   <supports-screens android:smallScreens="true"
                     android:normalScreens="true"

@@ -20,6 +20,7 @@ public class MainPage : ContentPage
 {
     private readonly MainViewModel _vm;
     private IDispatcherTimer? _timer;
+    private DateTime _lastUiTimerTickUtc;
     private bool _isWideLayout;
     private bool _layoutInitialized;
     private bool _firstOpenHelpChecked;
@@ -98,6 +99,19 @@ public class MainPage : ContentPage
 
         _vm.PropertyChanged += OnViewModelPropertyChanged;
         DevicePlatformService.PipModeChanged += OnPipModeChanged;
+        DevicePlatformService.BackgroundOverlayTick += HandleUiTimerTick;
+    }
+
+    private void HandleUiTimerTick()
+    {
+        DateTime now = DateTime.UtcNow;
+        if (_lastUiTimerTickUtc != default && (now - _lastUiTimerTickUtc).TotalSeconds < 0.8)
+        {
+            return;
+        }
+
+        _lastUiTimerTickUtc = now;
+        _vm.OnTimerTick();
     }
 
     private View BuildPipMiniTimerOverlay()
@@ -221,7 +235,7 @@ public class MainPage : ContentPage
         {
             _timer = Dispatcher.CreateTimer();
             _timer.Interval = TimeSpan.FromSeconds(1);
-            _timer.Tick += (_, _) => _vm.OnTimerTick();
+            _timer.Tick += (_, _) => HandleUiTimerTick();
             _timer.Start();
         }
 
