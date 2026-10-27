@@ -224,7 +224,33 @@ public class MainPage : ContentPage
             return true;
         }
 
+        if (_vm.IsLiveMode && _vm.IsLiveTimerRunning)
+        {
+            _ = ConfirmCloseAppWhileLiveRunningAsync();
+            return true;
+        }
+
         return base.OnBackButtonPressed();
+    }
+
+    private async Task ConfirmCloseAppWhileLiveRunningAsync()
+    {
+        string? choice = await ShowConfirmPromptAsync(
+            title: "Close Comp OWL?",
+            message: "The live warmup timer is currently running. Are you sure you want to close the app and stop the timer?",
+            accept: "Close App",
+            cancel: "Keep Running",
+            isDestructive: true);
+
+        if (choice == "CONFIRMED")
+        {
+            _vm.IsLiveMode = false;
+#if ANDROID
+            Microsoft.Maui.ApplicationModel.Platform.CurrentActivity?.Finish();
+#else
+            Application.Current?.Quit();
+#endif
+        }
     }
 
     protected override void OnAppearing()
@@ -3252,6 +3278,116 @@ public class MainPage : ContentPage
             promptEntry.Focus();
             SelectAllEntryText(promptEntry);
         });
+
+        return tcs.Task;
+    }
+
+    private Task<string?> ShowConfirmPromptAsync(
+        string title,
+        string message,
+        string accept = "Confirm",
+        string cancel = "Cancel",
+        bool isDestructive = false)
+    {
+        if (_activePromptTcs != null)
+        {
+            _activePromptTcs.TrySetResult(null);
+            _activePromptTcs = null;
+        }
+
+        var tcs = new TaskCompletionSource<string?>();
+        _activePromptTcs = tcs;
+
+        _promptOverlayHost.Children.Clear();
+
+        var backdropBox = new BoxView
+        {
+            Color = Colors.Transparent,
+            HorizontalOptions = LayoutOptions.Fill,
+            VerticalOptions = LayoutOptions.Fill
+        };
+        var backdropTap = new TapGestureRecognizer();
+        backdropTap.Tapped += (_, _) => CloseInputPrompt(null);
+        backdropBox.GestureRecognizers.Add(backdropTap);
+        _promptOverlayHost.Add(backdropBox);
+
+        string accentHex = isDestructive ? "#F59E0B" : "#38BDF8";
+        string acceptBtnHex = isDestructive ? "#DC2626" : "#0284C7";
+
+        var dialogBorder = new Border
+        {
+            BackgroundColor = Color.FromArgb("#1E293B"),
+            Stroke = Color.FromArgb(accentHex),
+            StrokeThickness = 1.5,
+            StrokeShape = new RoundRectangle { CornerRadius = 12 },
+            Padding = new Thickness(16, 14),
+            HorizontalOptions = LayoutOptions.Center,
+            VerticalOptions = LayoutOptions.Center,
+            WidthRequest = 320,
+            MaximumWidthRequest = 400,
+            Margin = new Thickness(16, 0, 16, 40)
+        };
+
+        var dialogStack = new VerticalStackLayout { Spacing = 10 };
+
+        dialogStack.Add(new Label
+        {
+            Text = title,
+            TextColor = Color.FromArgb(accentHex),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 15.5
+        });
+
+        dialogStack.Add(new Label
+        {
+            Text = message,
+            TextColor = Color.FromArgb("#E2E8F0"),
+            FontSize = 13,
+            LineHeight = 1.2
+        });
+
+        var btnRow = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Star }
+            },
+            ColumnSpacing = 10,
+            Margin = new Thickness(0, 6, 0, 0)
+        };
+
+        var cancelBtn = new Button
+        {
+            Text = cancel,
+            BackgroundColor = Color.FromArgb("#334155"),
+            TextColor = Color.FromArgb("#F8FAFC"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 13,
+            CornerRadius = 8,
+            HeightRequest = 40
+        };
+        cancelBtn.Clicked += (_, _) => CloseInputPrompt(null);
+
+        var acceptBtn = new Button
+        {
+            Text = accept,
+            BackgroundColor = Color.FromArgb(acceptBtnHex),
+            TextColor = Colors.White,
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 13,
+            CornerRadius = 8,
+            HeightRequest = 40
+        };
+        acceptBtn.Clicked += (_, _) => CloseInputPrompt("CONFIRMED");
+
+        btnRow.Add(cancelBtn, 0, 0);
+        btnRow.Add(acceptBtn, 1, 0);
+        dialogStack.Add(btnRow);
+
+        dialogBorder.Content = dialogStack;
+        _promptOverlayHost.Add(dialogBorder);
+        _promptOverlayHost.IsVisible = true;
 
         return tcs.Task;
     }
