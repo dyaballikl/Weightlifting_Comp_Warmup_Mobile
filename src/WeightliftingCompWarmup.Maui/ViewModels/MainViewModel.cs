@@ -1490,17 +1490,35 @@ public class MainViewModel : INotifyPropertyChanged
         ShowBanner($"Deleted profile '{deletedName}'. Active: '{ActiveProfile.Name}'.");
     }
 
-    public void SaveCurrentProfile()
+    public string ExportProfilesBackupJson()
     {
-        _storageService.Save();
-        ShowBanner($"Saved settings for '{ActiveProfile.Name}'.");
+        return _storageService.ExportBackupJson();
+    }
+
+    public (bool Success, string? ErrorMessage, int ImportedCount) ImportProfilesBackupJson(string? json)
+    {
+        StopLiveTimer();
+        var result = _storageService.ImportBackupJson(json);
+        if (result.Success)
+        {
+            AppThemeManager.SetPreference(_storageService.ThemePreference);
+            OnPropertyChanged(nameof(ThemePreference));
+            RefreshAllFromActiveProfile();
+            RefreshLiveStepsTheme();
+            ShowBanner($"Imported {result.ImportedCount} profile(s). Active: '{ActiveProfile.Name}'.");
+        }
+
+        return result;
     }
 
     public void ResetAllSettingsToDemo()
     {
         StopLiveTimer();
         _storageService.ResetAllSettings();
+        AppThemeManager.SetPreference(_storageService.ThemePreference);
+        OnPropertyChanged(nameof(ThemePreference));
         RefreshAllFromActiveProfile();
+        RefreshLiveStepsTheme();
         ShowBanner("Cleared all settings and restored 'Demo Profile'.");
     }
 

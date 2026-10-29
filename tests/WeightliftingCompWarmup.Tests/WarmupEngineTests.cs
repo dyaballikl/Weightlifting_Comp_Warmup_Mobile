@@ -377,4 +377,45 @@ public class WarmupEngineTests
             Assert.DoesNotContain("ðŸ", content);
         }
     }
+
+    [Fact]
+    public void ProfileStorageService_ExportsAndImportsBackupJson()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"compowl-test-{Guid.NewGuid():N}");
+        try
+        {
+            var storage1 = new ProfileStorageService(Path.Combine(tempDir, "profiles1.json"));
+            storage1.Load();
+            storage1.SetThemePreference(ProfileStorageService.ThemeLight);
+            var (added, err, created) = storage1.AddNewProfile("Athletes 89kg");
+            Assert.True(added);
+            Assert.Null(err);
+            created.SnatchOpenerWeight = 135;
+            created.CjOpenerWeight = 168;
+            storage1.Save();
+
+            string backupJson = storage1.ExportBackupJson();
+            Assert.False(string.IsNullOrWhiteSpace(backupJson));
+            Assert.Contains("Athletes 89kg", backupJson);
+
+            var storage2 = new ProfileStorageService(Path.Combine(tempDir, "profiles2.json"));
+            storage2.Load();
+
+            var (imported, importErr, count) = storage2.ImportBackupJson(backupJson);
+            Assert.True(imported);
+            Assert.Null(importErr);
+            Assert.Equal(2, count);
+            Assert.Equal("Athletes 89kg", storage2.ActiveProfile.Name);
+            Assert.Equal(135, storage2.ActiveProfile.SnatchOpenerWeight);
+            Assert.Equal(168, storage2.ActiveProfile.CjOpenerWeight);
+            Assert.Equal(ProfileStorageService.ThemeLight, storage2.ThemePreference);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
 }

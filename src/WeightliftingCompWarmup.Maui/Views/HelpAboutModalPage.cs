@@ -27,8 +27,8 @@ public class HelpAboutModalPage : ContentPage
 
     public const string AppShortName = "Comp OWL";
     public const string AppFullName = "Weightlifting Comp Warmup";
-    public const string AppVersion = "2.0.27";
-    public const string AppBuild = "29";
+    public const string AppVersion = "2.0.29";
+    public const string AppBuild = "31";
     public const string AppleAppStoreId = ""; // Populate with numeric App Store Connect ID once created
 
     public HelpAboutModalPage(bool startOnAboutTab = false, Action<string>? onSelectTheme = null)
@@ -316,7 +316,7 @@ public class HelpAboutModalPage : ContentPage
             stepTitle: "Choose a Lifter Profile, Bar Weight & Theme",
             bullets: new[]
             {
-                "Tap the 👤 Profile button (top-left) to switch lifters, create a new blank profile, duplicate an existing profile, or rename/delete profiles.",
+                "Tap the 👤 Profile button (top-left) to switch lifters, create a new blank profile, duplicate/rename/delete profiles, or export/import a .json backup (e.g., to Google Drive). All profile changes save automatically.",
                 "Tap the 🏋️ Bar button (top-right) to set the barbell weight (20 kg Men's bar, 15 kg Women's bar, or custom youth/technique bar).",
                 "Tap 🔔 Beep to toggle audio alerts when it is time for your next warmup lift.",
                 "Tap 🌓/🌙/☀️ in the top header (or use the Theme bar above) to switch between System, Dark, and Light modes."

@@ -1,9 +1,11 @@
 using Microsoft.Maui;
+using Microsoft.Maui.ApplicationModel.DataTransfer;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Controls.Shapes;
 using Microsoft.Maui.Devices;
 using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.Graphics;
+using Microsoft.Maui.Storage;
 using WeightliftingCompWarmup.Core.Models;
 using WeightliftingCompWarmup.Core.Services;
 using WeightliftingCompWarmup.Maui.Controls;
@@ -2825,7 +2827,8 @@ public class MainPage : ContentPage
             "➕ Add New Profile...",
             "📋 Duplicate Current Profile...",
             "✏️ Rename Current Profile...",
-            "💾 Save Profile Settings",
+            "📤 Export Backup (.json)...",
+            "📥 Import Backup (.json)...",
             "🗑️ Delete Current Profile",
             "⚠️ Clear All Settings (Reset to Demo)");
 
@@ -2850,7 +2853,7 @@ public class MainPage : ContentPage
                 "Enter a name for the new profile:",
                 "Create",
                 "Cancel",
-                initialValue: "Meet Day 89kg");
+                initialValue: "");
             if (!string.IsNullOrWhiteSpace(newName))
             {
                 var (ok, err) = _vm.CreateNewProfile(newName);
@@ -2896,9 +2899,13 @@ public class MainPage : ContentPage
                 }
             }
         }
-        else if (action.StartsWith("💾"))
+        else if (action.StartsWith("📤"))
         {
-            _vm.SaveCurrentProfile();
+            await ExportProfilesBackupAsync();
+        }
+        else if (action.StartsWith("📥"))
+        {
+            await ImportProfilesBackupAsync();
         }
         else if (action.StartsWith("🗑️"))
         {
@@ -2923,6 +2930,74 @@ public class MainPage : ContentPage
             {
                 _vm.ResetAllSettingsToDemo();
             }
+        }
+    }
+
+    private async Task ExportProfilesBackupAsync()
+    {
+        bool proceed = await DisplayAlertAsync(
+            "Export Profiles Backup (.json)",
+            "This creates a JSON backup of all your Comp OWL profiles and settings.\n\n💡 Tip: Save or upload this file to Google Drive so your profiles are safely backed up in the cloud and easy to restore on any device.",
+            "Export & Share...",
+            "Cancel");
+
+        if (!proceed)
+        {
+            return;
+        }
+
+        try
+        {
+            string json = _vm.ExportProfilesBackupJson();
+            string fileName = $"CompOWL-Backup-{DateTime.Now:yyyy-MM-dd}.json";
+            string filePath = System.IO.Path.Combine(FileSystem.CacheDirectory, fileName);
+            await File.WriteAllTextAsync(filePath, json, System.Text.Encoding.UTF8);
+
+            await Share.Default.RequestAsync(new ShareFileRequest
+            {
+                Title = "Save Comp OWL Backup (e.g., to Google Drive)",
+                File = new ShareFile(filePath, "application/json")
+            });
+        }
+        catch (Exception ex)
+        {
+            await DisplayAlertAsync("Export Failed", $"Could not export backup file: {ex.Message}", "OK");
+        }
+    }
+
+    private async Task ImportProfilesBackupAsync()
+    {
+        try
+        {
+            var result = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "Select Comp OWL Backup (.json)"
+            });
+
+            if (result == null)
+            {
+                return;
+            }
+
+            await using var stream = await result.OpenReadAsync();
+            using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            string json = await reader.ReadToEndAsync();
+
+            var (ok, err, count) = _vm.ImportProfilesBackupJson(json);
+            if (!ok)
+            {
+                await DisplayAlertAsync("Cannot Import Backup", err ?? "Invalid backup file.", "OK");
+                return;
+            }
+
+            await DisplayAlertAsync(
+                "Backup Imported",
+                $"Successfully imported {count} profile(s).\nActive profile: {_vm.ActiveProfileName}",
+                "OK");
+        }
+        catch (Exception ex)
+        {
+            await DisplayAlertAsync("Import Failed", $"Could not read backup file: {ex.Message}", "OK");
         }
     }
 

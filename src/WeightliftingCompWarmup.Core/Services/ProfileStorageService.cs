@@ -71,12 +71,15 @@ public class ProfileStorageService
                 if (state != null && state.Profiles.Count > 0)
                 {
                     Profiles = state.Profiles;
+                    foreach (var profile in Profiles)
+                    {
+                        EnsureBaselineRules(profile);
+                    }
                     HasSeenWelcomeHelp = state.HasSeenWelcomeHelp;
                     ThemePreference = NormalizeThemePreference(state.ThemePreference);
                     ActiveProfile = Profiles.FirstOrDefault(p =>
                         string.Equals(p.Name, state.LastUsedProfileName, StringComparison.OrdinalIgnoreCase))
                         ?? Profiles[0];
-                    EnsureBaselineRules(ActiveProfile);
                     return ActiveProfile;
                 }
             }
@@ -145,6 +148,85 @@ public class ProfileStorageService
 
         string json = JsonSerializer.Serialize(state, JsonOptions);
         File.WriteAllText(_storageFilePath, json);
+    }
+
+    /// <summary>
+    /// Exports all saved profiles and app settings to a formatted JSON backup string.
+    /// </summary>
+    public string ExportBackupJson()
+    {
+        foreach (var profile in Profiles)
+        {
+            EnsureBaselineRules(profile);
+        }
+
+        var state = new SavedAppState
+        {
+            LastUsedProfileName = ActiveProfile.Name,
+            HasSeenWelcomeHelp = HasSeenWelcomeHelp,
+            ThemePreference = ThemePreference,
+            Profiles = Profiles
+        };
+
+        return JsonSerializer.Serialize(state, JsonOptions);
+    }
+
+    /// <summary>
+    /// Imports profiles and settings from a JSON backup string and persists them to disk.
+    /// </summary>
+    public (bool Success, string? ErrorMessage, int ImportedCount) ImportBackupJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return (false, "The selected backup file is empty.", 0);
+        }
+
+        try
+        {
+            var state = JsonSerializer.Deserialize<SavedAppState>(json, JsonOptions);
+            if (state == null || state.Profiles == null || state.Profiles.Count == 0)
+            {
+                return (false, "No valid Comp OWL profiles were found in the selected file.", 0);
+            }
+
+            var validProfiles = new List<Profile>();
+            foreach (var profile in state.Profiles)
+            {
+                if (profile == null)
+                {
+                    continue;
+                }
+
+                profile.Name = string.IsNullOrWhiteSpace(profile.Name)
+                    ? $"Imported Profile {validProfiles.Count + 1}"
+                    : profile.Name.Trim();
+
+                EnsureBaselineRules(profile);
+                validProfiles.Add(profile);
+            }
+
+            if (validProfiles.Count == 0)
+            {
+                return (false, "No valid Comp OWL profiles were found in the selected file.", 0);
+            }
+
+            Profiles = validProfiles;
+            if (!string.IsNullOrWhiteSpace(state.ThemePreference))
+            {
+                ThemePreference = NormalizeThemePreference(state.ThemePreference);
+            }
+
+            ActiveProfile = Profiles.FirstOrDefault(p =>
+                string.Equals(p.Name, state.LastUsedProfileName, StringComparison.OrdinalIgnoreCase))
+                ?? Profiles[0];
+
+            Save();
+            return (true, null, Profiles.Count);
+        }
+        catch
+        {
+            return (false, "The selected file is not a valid Comp OWL JSON backup.", 0);
+        }
     }
 
     /// <summary>
