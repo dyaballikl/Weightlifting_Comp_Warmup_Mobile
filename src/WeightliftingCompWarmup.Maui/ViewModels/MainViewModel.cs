@@ -66,6 +66,9 @@ public class MainViewModel : INotifyPropertyChanged
     private string _liveActiveStepDescription = "Wait to start";
     private string _liveActiveStepRemaining = "0s";
     private double _liveActiveStepProgress;
+    private string _liveMiniCompStatusText = string.Empty;
+    private bool _canAdvanceLiveMiniPhase;
+    private string _liveMiniAdvanceButtonText = "⏭ Advance";
     private DateTime _lastTimerTickUtc;
     private string _updateAvailableVersion = string.Empty;
     private bool _isUpdateBannerDismissed;
@@ -132,7 +135,10 @@ public class MainViewModel : INotifyPropertyChanged
     public Profile ActiveProfile => _storageService.ActiveProfile;
     public bool HasSeenWelcomeHelp => _storageService.HasSeenWelcomeHelp;
 
-    public void MarkWelcomeHelpSeen() => _storageService.MarkWelcomeHelpSeen();
+    public void MarkWelcomeHelpSeen(string? currentAppVersion = null) => _storageService.MarkWelcomeHelpSeen(currentAppVersion);
+
+    public (bool HasUpdated, string PreviousVersion, IReadOnlyList<AppReleaseNote> Notes) ConsumeWhatsNewIfUpdated(string currentAppVersion)
+        => _storageService.ConsumeWhatsNewIfUpdated(currentAppVersion);
 
     public string ThemePreference
     {
@@ -402,6 +408,7 @@ public class MainViewModel : INotifyPropertyChanged
                 ActiveProfile.SnatchSecondsStage = clamped;
                 _storageService.Save();
                 OnPropertyChanged();
+                RefreshSetupCalculations();
             }
             else if (IsCjSelected && ActiveProfile.CjSecondsStage != clamped)
             {
@@ -491,6 +498,7 @@ public class MainViewModel : INotifyPropertyChanged
                 ActiveProfile.SnatchLiftsOut = clamped;
                 _storageService.Save();
                 OnPropertyChanged();
+                RefreshSetupCalculations();
             }
             else if (IsCjSelected && ActiveProfile.CjLiftsOut != clamped)
             {
@@ -513,11 +521,31 @@ public class MainViewModel : INotifyPropertyChanged
                 _storageService.Save();
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(SnatchBreakFormattedPreview));
+                RefreshSetupCalculations();
             }
         }
     }
 
     public string SnatchBreakFormattedPreview => WarmupCalculator.FormatSeconds(ActiveProfile.SnatchSecondsBreak);
+
+    public int SnatchPresentationLiftMinutes
+    {
+        get => ActiveProfile.SnatchMinutesPresentationLift;
+        set
+        {
+            int clamped = Math.Clamp(value, 0, 60);
+            if (ActiveProfile.SnatchMinutesPresentationLift != clamped)
+            {
+                ActiveProfile.SnatchMinutesPresentationLift = clamped;
+                _storageService.Save();
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(SnatchPresentationLiftFormattedPreview));
+                RefreshSetupCalculations();
+            }
+        }
+    }
+
+    public string SnatchPresentationLiftFormattedPreview => WarmupCalculator.FormatSeconds(ActiveProfile.SnatchSecondsPresentationLift);
 
     public int CjBreakMinutes
     {
@@ -893,6 +921,24 @@ public class MainViewModel : INotifyPropertyChanged
         private set { if (Math.Abs(_liveActiveStepProgress - value) > 0.001) { _liveActiveStepProgress = value; OnPropertyChanged(); } }
     }
 
+    public string LiveMiniCompStatusText
+    {
+        get => _liveMiniCompStatusText;
+        private set { if (_liveMiniCompStatusText != value) { _liveMiniCompStatusText = value; OnPropertyChanged(); } }
+    }
+
+    public bool CanAdvanceLiveMiniPhase
+    {
+        get => _canAdvanceLiveMiniPhase;
+        private set { if (_canAdvanceLiveMiniPhase != value) { _canAdvanceLiveMiniPhase = value; OnPropertyChanged(); } }
+    }
+
+    public string LiveMiniAdvanceButtonText
+    {
+        get => _liveMiniAdvanceButtonText;
+        private set { if (_liveMiniAdvanceButtonText != value) { _liveMiniAdvanceButtonText = value; OnPropertyChanged(); } }
+    }
+
     // Commands
     public ICommand SelectSnatchCommand { get; }
     public ICommand SelectCleanAndJerkCommand { get; }
@@ -906,6 +952,7 @@ public class MainViewModel : INotifyPropertyChanged
     public ICommand AdjustExtraSecondsEndCommand { get; }
     public ICommand AdjustSetupLiftsOutCommand { get; }
     public ICommand AdjustSnatchBreakMinutesCommand { get; }
+    public ICommand AdjustSnatchPresentationLiftMinutesCommand { get; }
     public ICommand AdjustCjBreakMinutesCommand { get; }
     public ICommand AdjustCjSnatchRemainingCommand { get; }
 
@@ -925,6 +972,7 @@ public class MainViewModel : INotifyPropertyChanged
     public ICommand ResetLiveSessionCommand { get; }
     public ICommand AdvanceStageLiftCommand { get; }
     public ICommand AdvanceCjSnatchLiftCommand { get; }
+    public ICommand AdvanceActiveLivePhaseCommand { get; }
     public ICommand AdjustLiveLiftsOutCommand { get; }
     public ICommand AdjustLiveCjSnatchLiftsOutCommand { get; }
     public ICommand ScrubStageProgressCommand { get; }
@@ -1016,6 +1064,14 @@ public class MainViewModel : INotifyPropertyChanged
             }
         });
 
+        AdjustSnatchPresentationLiftMinutesCommand = new Command<string>(deltaStr =>
+        {
+            if (int.TryParse(deltaStr, out int delta))
+            {
+                SnatchPresentationLiftMinutes += delta;
+            }
+        });
+
         AdjustCjBreakMinutesCommand = new Command<string>(deltaStr =>
         {
             if (int.TryParse(deltaStr, out int delta))
@@ -1047,6 +1103,7 @@ public class MainViewModel : INotifyPropertyChanged
         ResetLiveSessionCommand = new Command(() => InitializeLiveSession(autoStart: IsLiveTimerRunning));
         AdvanceStageLiftCommand = new Command(ExecuteAdvanceStageLift);
         AdvanceCjSnatchLiftCommand = new Command(ExecuteAdvanceCjSnatchLift);
+        AdvanceActiveLivePhaseCommand = new Command(ExecuteAdvanceActiveLivePhase);
         AdjustLiveLiftsOutCommand = new Command<string>(ExecuteAdjustLiveLiftsOut);
         AdjustLiveCjSnatchLiftsOutCommand = new Command<string>(ExecuteAdjustLiveCjSnatchLiftsOut);
         ScrubStageProgressCommand = new Command<double>(ExecuteScrubStageProgress);
@@ -1055,6 +1112,8 @@ public class MainViewModel : INotifyPropertyChanged
         ForceStartStageNowCommand = new Command(ExecuteForceStartStageNow);
         ToggleCjSnatchExpandedCommand = new Command(ExecuteToggleCjSnatchExpanded);
         ToggleCjBreakExpandedCommand = new Command(ExecuteToggleCjBreakExpanded);
+
+        _platformService.OverlayAdvanceRequested += ExecuteAdvanceActiveLivePhase;
 
         RefreshAllFromActiveProfile();
     }
@@ -1086,6 +1145,8 @@ public class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(SetupLiftsOut));
         OnPropertyChanged(nameof(SnatchBreakMinutes));
         OnPropertyChanged(nameof(SnatchBreakFormattedPreview));
+        OnPropertyChanged(nameof(SnatchPresentationLiftMinutes));
+        OnPropertyChanged(nameof(SnatchPresentationLiftFormattedPreview));
         OnPropertyChanged(nameof(CjBreakMinutes));
         OnPropertyChanged(nameof(CjBreakFormattedPreview));
         OnPropertyChanged(nameof(CjSnatchAttemptsRemaining));
@@ -1644,6 +1705,23 @@ public class MainViewModel : INotifyPropertyChanged
         ApplyLiveSnapshot(snapshot);
     }
 
+    private void ExecuteAdvanceActiveLivePhase()
+    {
+        if (_liveSession == null)
+        {
+            return;
+        }
+
+        if (_liveSession.LiftType == LiftType.CleanAndJerk && _liveSession.CjSnatchLiftsOut > 0)
+        {
+            ExecuteAdvanceCjSnatchLift();
+        }
+        else if (LiveIsStageLiftingStarted && _liveSession.LiftsOut > 0)
+        {
+            ExecuteAdvanceStageLift();
+        }
+    }
+
     private void ExecuteAdjustLiveLiftsOut(string? deltaStr)
     {
         if (_liveSession == null || !int.TryParse(deltaStr, out int delta))
@@ -1845,16 +1923,81 @@ public class MainViewModel : INotifyPropertyChanged
             LiveActiveStepProgress = 0.0;
         }
 
-        int activeLiftWeightKg = (activeStep != null && activeStep.IsLift && activeStep.WeightKg > 0)
+        int activeLiftWeightKg = (activeStep != null && activeStep.IsLift && !activeStep.IsOpener && activeStep.WeightKg > 0 && snapshot.SecondsToOpen > 0)
             ? activeStep.WeightKg
             : 0;
+
+        string compStatusText;
+        bool canAdvanceMini;
+        string advanceBtnText = "⏭ Advance";
+
+        if (snapshot.LiftType == LiftType.Snatch)
+        {
+            if (!snapshot.HasCompetitionStarted)
+            {
+                compStatusText = $"Start: {snapshot.TimeTillStartDisplay} • {snapshot.LiftsOut} Out";
+                canAdvanceMini = false;
+            }
+            else if (snapshot.CjBreakRemainingSeconds > 0)
+            {
+                compStatusText = $"10m Clock: {snapshot.CjBreakRemainingDisplay} • {snapshot.LiftsOut} Out";
+                canAdvanceMini = false;
+            }
+            else if (snapshot.LiftsOut > 0)
+            {
+                int stageRem = Math.Max(0, snapshot.StageLiftMaximum - snapshot.StageLiftElapsed);
+                compStatusText = $"Lifts Out: {snapshot.LiftsOut} • {WarmupCalculator.FormatSeconds(stageRem)}";
+                canAdvanceMini = true;
+            }
+            else
+            {
+                compStatusText = "Lifts Out: 0 • Stage Done";
+                canAdvanceMini = false;
+            }
+        }
+        else
+        {
+            if (snapshot.CjSnatchLiftsOut > 0)
+            {
+                int snatchRem = Math.Max(0, snapshot.CjSnatchStageMaximum - snapshot.CjSnatchStageElapsed);
+                compStatusText = $"Snatch Left: {snapshot.CjSnatchLiftsOut} • {WarmupCalculator.FormatSeconds(snatchRem)}";
+                canAdvanceMini = true;
+                advanceBtnText = "⏭ Snatch";
+            }
+            else if (snapshot.CjBreakRemainingSeconds > 0)
+            {
+                compStatusText = $"10m Break: {snapshot.CjBreakRemainingDisplay} • {snapshot.LiftsOut} Out";
+                canAdvanceMini = false;
+            }
+            else if (snapshot.LiftsOut > 0)
+            {
+                int stageRem = Math.Max(0, snapshot.StageLiftMaximum - snapshot.StageLiftElapsed);
+                compStatusText = $"Lifts Out: {snapshot.LiftsOut} • {WarmupCalculator.FormatSeconds(stageRem)}";
+                canAdvanceMini = true;
+            }
+            else
+            {
+                compStatusText = "Lifts Out: 0 • Stage Done";
+                canAdvanceMini = false;
+            }
+        }
+
+        LiveMiniCompStatusText = compStatusText;
+        CanAdvanceLiveMiniPhase = canAdvanceMini;
+        LiveMiniAdvanceButtonText = advanceBtnText;
+
+        bool isWarmupCompleted = snapshot.SecondsToOpen <= 0 || (activeStep?.IsOpener == true);
 
         _platformService.UpdateLiveMiniTimerFrame(
             LiveActiveStepDescription,
             LiveActiveStepRemaining,
             LiveActiveStepProgress,
             activeLiftWeightKg,
-            ActiveProfile.BarbellWeight);
+            ActiveProfile.BarbellWeight,
+            compStatusText,
+            canAdvanceMini,
+            advanceBtnText,
+            isWarmupCompleted);
 
         if (snapshot.TriggerBeep)
         {

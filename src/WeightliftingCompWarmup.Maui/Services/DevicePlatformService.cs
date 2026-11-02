@@ -26,13 +26,45 @@ public class DevicePlatformService
     private string? _discoveredStoreUrlIos;
 
     public static bool IsLiveMiniTimerActive { get; private set; }
+    public static bool IsLiveWarmupCompleted { get; private set; }
     public static bool IsInPipMode { get; private set; }
     public static event Action<bool>? PipModeChanged;
     public static event Action? BackgroundOverlayTick;
+    public event Action? OverlayAdvanceRequested;
+    private static event Action? StaticOverlayAdvanceRequested;
 
 #if ANDROID
     private static bool _hasPromptedOverlayPermissionThisSession;
 #endif
+
+    public DevicePlatformService()
+    {
+        StaticOverlayAdvanceRequested += OnStaticOverlayAdvanceRequested;
+    }
+
+    private void OnStaticOverlayAdvanceRequested()
+    {
+        try
+        {
+            OverlayAdvanceRequested?.Invoke();
+        }
+        catch
+        {
+            // Ignore listener exceptions
+        }
+    }
+
+    public static void RaiseOverlayAdvanceRequested()
+    {
+        try
+        {
+            StaticOverlayAdvanceRequested?.Invoke();
+        }
+        catch
+        {
+            // Ignore overlay advance listener exceptions
+        }
+    }
 
     public static void RaiseBackgroundOverlayTick()
     {
@@ -128,6 +160,10 @@ public class DevicePlatformService
     public void SetLiveMiniTimerEnabled(bool enabled)
     {
         IsLiveMiniTimerActive = enabled;
+        if (!enabled)
+        {
+            IsLiveWarmupCompleted = false;
+        }
 #if ANDROID
         try
         {
@@ -167,8 +203,13 @@ public class DevicePlatformService
         string remainingText,
         double progress,
         int liftWeightKg = 0,
-        int barWeightKg = 20)
+        int barWeightKg = 20,
+        string compStatusText = "",
+        bool canAdvanceStage = false,
+        string advanceButtonText = "⏭ Advance",
+        bool isWarmupCompleted = false)
     {
+        IsLiveWarmupCompleted = isWarmupCompleted;
 #if ANDROID
         try
         {
@@ -177,7 +218,10 @@ public class DevicePlatformService
                 remainingText,
                 progress,
                 liftWeightKg,
-                barWeightKg);
+                barWeightKg,
+                compStatusText,
+                canAdvanceStage,
+                advanceButtonText);
         }
         catch
         {
@@ -196,7 +240,8 @@ public class DevicePlatformService
                 remainingText,
                 progress,
                 liftWeightKg,
-                barWeightKg);
+                barWeightKg,
+                compStatusText);
         }
         catch
         {
@@ -267,6 +312,11 @@ public class DevicePlatformService
             return;
         }
 
+        if (IsLiveWarmupCompleted)
+        {
+            return;
+        }
+
         if (AndroidFloatingTimerOverlay.CanDrawOverlays(activity))
         {
             AndroidFloatingTimerOverlay.Shared.Show(activity);
@@ -278,6 +328,11 @@ public class DevicePlatformService
         if (!IsLiveMiniTimerActive)
         {
             AndroidFloatingTimerOverlay.Shared.Hide();
+            return;
+        }
+
+        if (IsLiveWarmupCompleted)
+        {
             return;
         }
 

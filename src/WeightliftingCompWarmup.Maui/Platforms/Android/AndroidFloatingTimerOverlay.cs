@@ -25,11 +25,10 @@ namespace WeightliftingCompWarmup.Maui.Services;
 /// </summary>
 public sealed class AndroidFloatingTimerOverlay
 {
-    private const int PillWidthDp = 184;
-    private const int PillHeightDp = 58;
-    private const int PillCornerRadiusDp = 29;
-    private const int ProgressBarTrackWidthDp = 124;
-    private const int ProgressBarHeightDp = 3;
+    private const int PillWidthDp = 228;
+    private const int PillCornerRadiusDp = 18;
+    private const int ProgressBarTrackWidthDp = 200;
+    private const int ProgressBarHeightDp = 4;
 
     // Plate rectangle dimensions: big plates are single-width (8dp) normal-height (28dp);
     // change plates are half-width (4dp) and 2/3 height (~19dp).
@@ -44,11 +43,16 @@ public sealed class AndroidFloatingTimerOverlay
     private IWindowManager? _windowManager;
     private WindowManagerLayoutParams? _layoutParams;
     private LinearLayout? _rootPillView;
+    private TextView? _compStatusTextView;
+    private TextView? _advanceBtnView;
     private TextView? _stepTextView;
     private TextView? _remainingTextView;
     private LinearLayout? _platesRow;
     private AView? _progressFillView;
 
+    private string _compStatusText = "Live Warmup";
+    private bool _canAdvanceStage;
+    private string _advanceButtonText = "⏭ Advance";
     private string _stepDescription = "Wait to start";
     private string _remainingText = "0s";
     private double _progressFraction;
@@ -90,13 +94,19 @@ public sealed class AndroidFloatingTimerOverlay
         string remainingText,
         double progressFraction,
         int liftWeightKg = 0,
-        int barWeightKg = 20)
+        int barWeightKg = 20,
+        string compStatusText = "",
+        bool canAdvanceStage = false,
+        string advanceButtonText = "⏭ Advance")
     {
         _stepDescription = string.IsNullOrWhiteSpace(stepDescription) ? "Live Warmup" : stepDescription.Trim();
         _remainingText = string.IsNullOrWhiteSpace(remainingText) ? "0s" : remainingText.Trim();
         _progressFraction = Math.Clamp(progressFraction, 0.0, 1.0);
         _liftWeightKg = Math.Max(0, liftWeightKg);
         _barWeightKg = barWeightKg > 0 ? barWeightKg : 20;
+        _compStatusText = string.IsNullOrWhiteSpace(compStatusText) ? "Live Warmup" : compStatusText.Trim();
+        _canAdvanceStage = canAdvanceStage;
+        _advanceButtonText = string.IsNullOrWhiteSpace(advanceButtonText) ? "⏭ Advance" : advanceButtonText.Trim();
 
         if (!_isShowing)
         {
@@ -131,7 +141,6 @@ public sealed class AndroidFloatingTimerOverlay
 
             _density = ctx.Resources?.DisplayMetrics?.Density ?? 2.75f;
             int widthPx = DpToPx(PillWidthDp, _density);
-            int heightPx = DpToPx(PillHeightDp, _density);
             _trackWidthPx = DpToPx(ProgressBarTrackWidthDp, _density);
             _lastRenderedLiftWeightKg = -1;
             _lastRenderedBarWeightKg = -1;
@@ -142,7 +151,7 @@ public sealed class AndroidFloatingTimerOverlay
 
             _layoutParams = new WindowManagerLayoutParams(
                 widthPx,
-                heightPx,
+                ViewGroup.LayoutParams.WrapContent,
                 windowType,
                 WindowManagerFlags.NotFocusable |
                 WindowManagerFlags.NotTouchModal |
@@ -194,6 +203,8 @@ public sealed class AndroidFloatingTimerOverlay
         {
             _isShowing = false;
             _rootPillView = null;
+            _compStatusTextView = null;
+            _advanceBtnView = null;
             _stepTextView = null;
             _remainingTextView = null;
             _platesRow = null;
@@ -208,35 +219,126 @@ public sealed class AndroidFloatingTimerOverlay
         var pillBg = new GradientDrawable();
         pillBg.SetShape(ShapeType.Rectangle);
         pillBg.SetCornerRadius(DpToPx(PillCornerRadiusDp, density));
-        pillBg.SetColor(AColor.ParseColor("#F2111827"));
+        pillBg.SetColor(AColor.ParseColor("#F50F172A"));
+        pillBg.SetStroke(Math.Max(1, DpToPx(1.2f, density)), AColor.ParseColor("#334155"));
 
         var root = new LinearLayout(ctx)
         {
-            Orientation = Orientation.Horizontal,
+            Orientation = Orientation.Vertical,
             Background = pillBg,
             Elevation = DpToPx(8, density)
         };
-        root.SetGravity(GravityFlags.CenterVertical);
         root.SetPadding(
-            DpToPx(14, density),
-            DpToPx(6, density),
+            DpToPx(12, density),
+            DpToPx(8, density),
             DpToPx(10, density),
-            DpToPx(6, density));
+            DpToPx(8, density));
 
-        var leftColumn = new LinearLayout(ctx)
+        // 1. Upper Section: Competition Status + Advance Lift Button + Close Button
+        var upperRow = new LinearLayout(ctx)
         {
-            Orientation = Orientation.Vertical
+            Orientation = Orientation.Horizontal
         };
-        leftColumn.SetGravity(GravityFlags.CenterVertical);
-        var leftColParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f);
+        upperRow.SetGravity(GravityFlags.CenterVertical);
+        var upperRowParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MatchParent,
+            ViewGroup.LayoutParams.WrapContent);
 
-        // Top row above the progress bar: step/countdown text on the left, loaded plate rectangles on the right
+        _compStatusTextView = new TextView(ctx)
+        {
+            Text = _compStatusText,
+            Typeface = Typeface.DefaultBold,
+            Ellipsize = TextUtils.TruncateAt.End
+        };
+        _compStatusTextView.SetSingleLine(true);
+        _compStatusTextView.SetTextColor(AColor.ParseColor("#38BDF8"));
+        _compStatusTextView.SetTextSize(ComplexUnitType.Dip, 11.0f);
+        _compStatusTextView.SetIncludeFontPadding(false);
+        var compStatusParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f);
+
+        var advanceBg = new GradientDrawable();
+        advanceBg.SetShape(ShapeType.Rectangle);
+        advanceBg.SetCornerRadius(DpToPx(6, density));
+        advanceBg.SetColor(AColor.ParseColor("#0284C7"));
+
+        _advanceBtnView = new TextView(ctx)
+        {
+            Text = _advanceButtonText,
+            Typeface = Typeface.DefaultBold,
+            Gravity = GravityFlags.Center,
+            Background = advanceBg,
+            Visibility = _canAdvanceStage ? ViewStates.Visible : ViewStates.Gone
+        };
+        _advanceBtnView.SetSingleLine(true);
+        _advanceBtnView.SetTextColor(AColor.ParseColor("#FFFFFF"));
+        _advanceBtnView.SetTextSize(ComplexUnitType.Dip, 10.5f);
+        _advanceBtnView.SetIncludeFontPadding(false);
+        _advanceBtnView.SetPadding(
+            DpToPx(7, density),
+            DpToPx(4, density),
+            DpToPx(7, density),
+            DpToPx(4, density));
+        var advanceParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WrapContent,
+            ViewGroup.LayoutParams.WrapContent)
+        {
+            LeftMargin = DpToPx(5, density)
+        };
+        _advanceBtnView.Click += (_, _) =>
+        {
+            DevicePlatformService.RaiseOverlayAdvanceRequested();
+        };
+
+        int closeSizePx = DpToPx(22, density);
+        var closeBg = new GradientDrawable();
+        closeBg.SetShape(ShapeType.Oval);
+        closeBg.SetColor(AColor.ParseColor("#26FFFFFF"));
+
+        var closeBtn = new TextView(ctx)
+        {
+            Text = "✕",
+            Typeface = Typeface.DefaultBold,
+            Gravity = GravityFlags.Center,
+            Background = closeBg
+        };
+        closeBtn.SetTextColor(AColor.ParseColor("#CBD5E1"));
+        closeBtn.SetTextSize(ComplexUnitType.Dip, 10.5f);
+        closeBtn.SetIncludeFontPadding(false);
+
+        var closeParams = new LinearLayout.LayoutParams(closeSizePx, closeSizePx)
+        {
+            LeftMargin = DpToPx(6, density)
+        };
+
+        closeBtn.Click += (_, _) =>
+        {
+            Hide();
+        };
+
+        upperRow.AddView(_compStatusTextView, compStatusParams);
+        upperRow.AddView(_advanceBtnView, advanceParams);
+        upperRow.AddView(closeBtn, closeParams);
+
+        // Divider between Competition Status and Active Warmup Step
+        var divider = new AView(ctx);
+        divider.SetBackgroundColor(AColor.ParseColor("#334155"));
+        var dividerParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MatchParent,
+            Math.Max(1, DpToPx(1, density)))
+        {
+            TopMargin = DpToPx(5, density),
+            BottomMargin = DpToPx(5, density)
+        };
+
+        // 2. Lower Section: Step/Countdown text on the left, loaded plate rectangles on the right, progress bar below
         var topRow = new LinearLayout(ctx)
         {
             Orientation = Orientation.Horizontal
         };
         topRow.SetGravity(GravityFlags.CenterVertical);
-        var topRowParams = new LinearLayout.LayoutParams(_trackWidthPx, ViewGroup.LayoutParams.WrapContent);
+        var topRowParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MatchParent,
+            ViewGroup.LayoutParams.WrapContent);
 
         var textColumn = new LinearLayout(ctx)
         {
@@ -253,7 +355,7 @@ public sealed class AndroidFloatingTimerOverlay
         };
         _stepTextView.SetSingleLine(true);
         _stepTextView.SetTextColor(AColor.ParseColor("#E2E8F0"));
-        _stepTextView.SetTextSize(ComplexUnitType.Dip, 11.5f);
+        _stepTextView.SetTextSize(ComplexUnitType.Dip, 12.0f);
         _stepTextView.SetIncludeFontPadding(false);
 
         _remainingTextView = new TextView(ctx)
@@ -263,7 +365,7 @@ public sealed class AndroidFloatingTimerOverlay
         };
         _remainingTextView.SetSingleLine(true);
         _remainingTextView.SetTextColor(AColor.ParseColor("#FACC15"));
-        _remainingTextView.SetTextSize(ComplexUnitType.Dip, 17.5f);
+        _remainingTextView.SetTextSize(ComplexUnitType.Dip, 18.0f);
         _remainingTextView.SetIncludeFontPadding(false);
 
         textColumn.AddView(_stepTextView);
@@ -299,7 +401,7 @@ public sealed class AndroidFloatingTimerOverlay
         };
         var trackParams = new LinearLayout.LayoutParams(_trackWidthPx, barHeightPx)
         {
-            TopMargin = DpToPx(3, density)
+            TopMargin = DpToPx(4, density)
         };
 
         var fillBg = new GradientDrawable();
@@ -317,37 +419,10 @@ public sealed class AndroidFloatingTimerOverlay
         };
         progressTrack.AddView(_progressFillView, fillParams);
 
-        leftColumn.AddView(topRow, topRowParams);
-        leftColumn.AddView(progressTrack, trackParams);
-
-        int closeSizePx = DpToPx(26, density);
-        var closeBg = new GradientDrawable();
-        closeBg.SetShape(ShapeType.Oval);
-        closeBg.SetColor(AColor.ParseColor("#26FFFFFF"));
-
-        var closeBtn = new TextView(ctx)
-        {
-            Text = "✕",
-            Typeface = Typeface.DefaultBold,
-            Gravity = GravityFlags.Center,
-            Background = closeBg
-        };
-        closeBtn.SetTextColor(AColor.ParseColor("#CBD5E1"));
-        closeBtn.SetTextSize(ComplexUnitType.Dip, 11.5f);
-        closeBtn.SetIncludeFontPadding(false);
-
-        var closeParams = new LinearLayout.LayoutParams(closeSizePx, closeSizePx)
-        {
-            LeftMargin = DpToPx(8, density)
-        };
-
-        closeBtn.Click += (_, _) =>
-        {
-            Hide();
-        };
-
-        root.AddView(leftColumn, leftColParams);
-        root.AddView(closeBtn, closeParams);
+        root.AddView(upperRow, upperRowParams);
+        root.AddView(divider, dividerParams);
+        root.AddView(topRow, topRowParams);
+        root.AddView(progressTrack, trackParams);
 
         root.SetOnTouchListener(new PillDragTouchListener(this, density));
         return root;
@@ -362,6 +437,25 @@ public sealed class AndroidFloatingTimerOverlay
 
         try
         {
+            if (_compStatusTextView != null && _compStatusTextView.Text != _compStatusText)
+            {
+                _compStatusTextView.Text = _compStatusText;
+            }
+
+            if (_advanceBtnView != null)
+            {
+                var desiredVisibility = _canAdvanceStage ? ViewStates.Visible : ViewStates.Gone;
+                if (_advanceBtnView.Visibility != desiredVisibility)
+                {
+                    _advanceBtnView.Visibility = desiredVisibility;
+                }
+
+                if (_advanceBtnView.Text != _advanceButtonText)
+                {
+                    _advanceBtnView.Text = _advanceButtonText;
+                }
+            }
+
             if (_stepTextView != null && _stepTextView.Text != _stepDescription)
             {
                 _stepTextView.Text = _stepDescription;
@@ -513,7 +607,7 @@ public sealed class AndroidFloatingTimerOverlay
                 try
                 {
                     using var options = ActivityOptions.MakeBasic();
-                    options.SetPendingIntentBackgroundActivityStartMode(BackgroundActivityStartMode.Allowed);
+                    options?.SetPendingIntentBackgroundActivityStartMode(BackgroundActivityStartMode.Allowed);
                     using var pendingIntent = PendingIntent.GetActivity(
                         ctx,
                         0,
@@ -521,7 +615,7 @@ public sealed class AndroidFloatingTimerOverlay
                         PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
                     if (pendingIntent != null)
                     {
-                        pendingIntent.Send(ctx, 0, null, null, null, null, options.ToBundle());
+                        pendingIntent.Send(ctx, 0, null, null, null, null, options?.ToBundle());
                         launched = true;
                     }
                 }

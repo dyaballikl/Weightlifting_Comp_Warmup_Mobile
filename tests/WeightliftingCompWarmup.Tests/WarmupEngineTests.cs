@@ -75,6 +75,36 @@ public class WarmupEngineTests
     }
 
     [Fact]
+    public void BuildSteps_Snatch_AddsPresentationLiftBufferToLiftActiveAtCompetitionStart()
+    {
+        var profile = Defaults.CreateDemoProfile();
+        // Default presentation lift buffer is 3 minutes (180s)
+        Assert.Equal(180, profile.SnatchSecondsPresentationLift);
+        Assert.Equal(3, profile.SnatchMinutesPresentationLift);
+
+        // Without presentation buffer:
+        profile.SnatchSecondsPresentationLift = 0;
+        var baseSteps = WarmupCalculator.BuildSteps(LiftType.Snatch, profile);
+
+        // Competition start is SnatchSecondsBreak (840s) + SnatchLiftsOut (4) * SnatchSecondsStage (50s) = 1040s before opener.
+        // Presentation ends 180s later at 1040 - 180 = 860s before opener.
+        // In Demo Snatch, 65kg spans [810s .. 960s] before opener without buffer, and [810s .. 1140s] with the 180s buffer,
+        // so 65kg starts before competition start (1040s) and finishes after presentation ends (860s).
+        var baseLift65 = baseSteps.Single(s => s.Weight == 65);
+        Assert.Equal(150, baseLift65.Length);
+
+        // With 3m (180s) presentation buffer:
+        profile.SnatchMinutesPresentationLift = 3;
+        var bufferedSteps = WarmupCalculator.BuildSteps(LiftType.Snatch, profile);
+        var bufferedLift65 = bufferedSteps.Single(s => s.Weight == 65);
+        Assert.Equal(330, bufferedLift65.Length); // 150s + 180s = 330s (5m30s)
+        Assert.Equal(1140, bufferedLift65.TotalLengthReverse); // starts 19m0s before opener, ends 13m30s before opener
+
+        // Total warmup duration increases by exactly 180s
+        Assert.Equal(baseSteps[0].TotalLengthReverse + 180, bufferedSteps[0].TotalLengthReverse);
+    }
+
+    [Fact]
     public void BarbellLoadCalculator_PlacesFractionalChangePlatesOutsideCompetitionCollar()
     {
         // 20kg bar + 5kg comp collars + (25 + 10 + 1.5)*2 = 98kg opener
@@ -415,6 +445,55 @@ public class WarmupEngineTests
             if (Directory.Exists(tempDir))
             {
                 Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ProfileStorageService_SkipsWhatsNewOnFirstOpen_AndShowsChangesAfterUpdate()
+    {
+        string tempFile = Path.Combine(Path.GetTempPath(), $"wcw_whatsnew_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            // 1. Brand new install (first open): HasSeenWelcomeHelp is false -> skips What's New
+            var firstOpenStorage = new ProfileStorageService(tempFile);
+            firstOpenStorage.Load();
+            Assert.False(firstOpenStorage.HasSeenWelcomeHelp);
+
+            var firstCheck = firstOpenStorage.ConsumeWhatsNewIfUpdated("2.0.28");
+            Assert.False(firstCheck.HasUpdated);
+            Assert.Empty(firstCheck.Notes);
+
+            firstOpenStorage.MarkWelcomeHelpSeen("2.0.28");
+            Assert.True(firstOpenStorage.HasSeenWelcomeHelp);
+            Assert.Equal("2.0.28", firstOpenStorage.LastSeenAppVersion);
+
+            // 2. Subsequent open on the same version (2.0.28) -> no update splash
+            var sameVersionStorage = new ProfileStorageService(tempFile);
+            sameVersionStorage.Load();
+            var sameVersionCheck = sameVersionStorage.ConsumeWhatsNewIfUpdated("2.0.28");
+            Assert.False(sameVersionCheck.HasUpdated);
+            Assert.Empty(sameVersionCheck.Notes);
+
+            // 3. App updates from 2.0.28 -> 2.0.30 -> shows summaries for 2.0.30 and 2.0.29
+            var updatedStorage = new ProfileStorageService(tempFile);
+            updatedStorage.Load();
+            var updateCheck = updatedStorage.ConsumeWhatsNewIfUpdated("2.0.30");
+            Assert.True(updateCheck.HasUpdated);
+            Assert.Equal("2.0.28", updateCheck.PreviousVersion);
+            Assert.Equal(["2.0.30", "2.0.29"], updateCheck.Notes.Select(n => n.Version).ToArray());
+
+            // 4. Opening 2.0.30 again does not repeat the splash
+            var postUpdateStorage = new ProfileStorageService(tempFile);
+            postUpdateStorage.Load();
+            var postUpdateCheck = postUpdateStorage.ConsumeWhatsNewIfUpdated("2.0.30");
+            Assert.False(postUpdateCheck.HasUpdated);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
             }
         }
     }

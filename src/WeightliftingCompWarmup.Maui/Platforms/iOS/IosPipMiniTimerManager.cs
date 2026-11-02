@@ -21,7 +21,7 @@ namespace WeightliftingCompWarmup.Maui.Platforms.iOS;
 public sealed class IosPipMiniTimerManager : NSObject, IAVPictureInPictureControllerDelegate, IAVPictureInPictureSampleBufferPlaybackDelegate
 {
     private const int FrameWidth = 380;
-    private const int FrameHeight = 160;
+    private const int FrameHeight = 200;
 
     public static IosPipMiniTimerManager Shared { get; } = new();
 
@@ -30,6 +30,7 @@ public sealed class IosPipMiniTimerManager : NSObject, IAVPictureInPictureContro
     private AVPictureInPictureController? _pipController;
     private AVAudioPlayer? _silentKeepAlivePlayer;
     private bool _isEnabled;
+    private string _lastCompStatusText = "Live Warmup";
     private string _lastStepDescription = "Wait to start";
     private string _lastRemainingText = "0s";
     private double _lastProgress;
@@ -83,13 +84,20 @@ public sealed class IosPipMiniTimerManager : NSObject, IAVPictureInPictureContro
         }
     }
 
-    public void UpdateFrame(string stepDescription, string remainingText, double progress, int liftWeightKg = 0, int barWeightKg = 20)
+    public void UpdateFrame(
+        string stepDescription,
+        string remainingText,
+        double progress,
+        int liftWeightKg = 0,
+        int barWeightKg = 20,
+        string compStatusText = "")
     {
         _lastStepDescription = string.IsNullOrWhiteSpace(stepDescription) ? "Wait to start" : stepDescription;
         _lastRemainingText = string.IsNullOrWhiteSpace(remainingText) ? "0s" : remainingText;
         _lastProgress = Math.Clamp(progress, 0.0, 1.0);
         _lastLiftWeightKg = Math.Max(0, liftWeightKg);
         _lastBarWeightKg = barWeightKg > 0 ? barWeightKg : 20;
+        _lastCompStatusText = string.IsNullOrWhiteSpace(compStatusText) ? "Live Warmup" : compStatusText;
 
         if (!_isEnabled)
         {
@@ -337,7 +345,25 @@ public sealed class IosPipMiniTimerManager : NSObject, IAVPictureInPictureContro
                         ? FrameWidth - platesTotalWidth - 36f
                         : FrameWidth - 28f;
 
-                    // 4. Step Description (Top line, bold white #F8FAFC)
+                    // 4. Upper Section: Competition Status (#38BDF8) + Divider
+                    var compParagraph = new NSMutableParagraphStyle
+                    {
+                        Alignment = UITextAlignment.Left,
+                        LineBreakMode = UILineBreakMode.TailTruncation
+                    };
+                    var compAttrs = new UIStringAttributes
+                    {
+                        Font = UIFont.BoldSystemFontOfSize(21f),
+                        ForegroundColor = UIColor.FromRGB(56, 189, 248),
+                        ParagraphStyle = compParagraph
+                    };
+                    using var nsComp = new NSString(_lastCompStatusText);
+                    nsComp.DrawString(new CGRect(18, 14, FrameWidth - 36, 28), compAttrs);
+
+                    UIColor.FromRGB(51, 65, 85).SetFill();
+                    context.FillRect(new CGRect(18, 46, FrameWidth - 36, 2));
+
+                    // 5. Step Description (bold white #F8FAFC)
                     var paragraphStyle = new NSMutableParagraphStyle
                     {
                         Alignment = platesTotalWidth > 0 ? UITextAlignment.Left : UITextAlignment.Center,
@@ -346,30 +372,30 @@ public sealed class IosPipMiniTimerManager : NSObject, IAVPictureInPictureContro
 
                     var stepAttrs = new UIStringAttributes
                     {
-                        Font = UIFont.BoldSystemFontOfSize(26f),
+                        Font = UIFont.BoldSystemFontOfSize(25f),
                         ForegroundColor = UIColor.FromRGB(248, 250, 252),
                         ParagraphStyle = paragraphStyle
                     };
 
                     using var nsStep = new NSString(stepDescription);
-                    nsStep.DrawString(new CGRect(18, 24, textAreaWidth, 36), stepAttrs);
+                    nsStep.DrawString(new CGRect(18, 56, textAreaWidth, 34), stepAttrs);
 
-                    // 5. Remaining Time ("xhxmxs", large bold gold #FACC15)
+                    // 6. Remaining Time ("xhxmxs", large bold gold #FACC15)
                     var timeAttrs = new UIStringAttributes
                     {
-                        Font = UIFont.BoldSystemFontOfSize(50f),
+                        Font = UIFont.BoldSystemFontOfSize(48f),
                         ForegroundColor = UIColor.FromRGB(250, 204, 21),
                         ParagraphStyle = paragraphStyle
                     };
 
                     using var nsTime = new NSString(remainingText);
-                    nsTime.DrawString(new CGRect(18, 66, textAreaWidth, 66), timeAttrs);
+                    nsTime.DrawString(new CGRect(18, 96, textAreaWidth, 62), timeAttrs);
 
                     // Draw plate stack to the right of the text
                     if (platesTotalWidth > 0 && sleeveElements != null)
                     {
                         nfloat plateX = FrameWidth - platesTotalWidth - 16f;
-                        nfloat centerY = 76f;
+                        nfloat centerY = 114f;
                         foreach (var plate in sleeveElements)
                         {
                             bool isBigPlate = plate.WeightKg >= 10.0m || plate.HeightRatio >= 0.99;

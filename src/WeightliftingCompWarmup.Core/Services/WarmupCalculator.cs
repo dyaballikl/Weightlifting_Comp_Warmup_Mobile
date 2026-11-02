@@ -244,6 +244,43 @@ public static class WarmupCalculator
                 isOpener: false));
         }
 
+        // In Snatch, stretch the warmup lift that is active when competition starts
+        // (lifters called out for athlete presentation) by SnatchSecondsPresentationLift (default 3 min).
+        // Because steps are scheduled backward from the opener, adding `bonus` to a step moves its
+        // start time earlier by `bonus` while keeping its end time fixed. Matching the step at
+        // `compStartSecondsBeforeOpener - bonus` (when presentation ends) guarantees that once `bonus`
+        // is added, that lift starts before competition start and finishes after presentation ends.
+        if (liftType == LiftType.Snatch && profile.SnatchSecondsPresentationLift > 0)
+        {
+            int bonus = profile.SnatchSecondsPresentationLift;
+            int compStartSecondsBeforeOpener = Math.Max(0, profile.SnatchSecondsBreak) +
+                (Math.Max(0, profile.SnatchLiftsOut) * Math.Max(1, profile.SnatchSecondsStage));
+            int presentationEndSecondsBeforeOpener = Math.Max(0, compStartSecondsBeforeOpener - bonus);
+
+            if (presentationEndSecondsBeforeOpener > 0)
+            {
+                int runningReverse = 0;
+                for (int i = steps.Count - 1; i >= 0; i--)
+                {
+                    int nextReverse = runningReverse + steps[i].Length;
+                    if (runningReverse < presentationEndSecondsBeforeOpener && nextReverse >= presentationEndSecondsBeforeOpener)
+                    {
+                        if (steps[i].IsLift)
+                        {
+                            steps[i].Length += bonus;
+                            totalSeconds += bonus;
+                            for (int j = i; j < steps.Count; j++)
+                            {
+                                steps[j].TotalLength += bonus;
+                            }
+                        }
+                        break;
+                    }
+                    runningReverse = nextReverse;
+                }
+            }
+        }
+
         int reverseTotal = 0;
         for (int i = steps.Count - 1; i >= 0; i--)
         {

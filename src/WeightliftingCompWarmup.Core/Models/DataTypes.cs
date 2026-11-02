@@ -169,6 +169,7 @@ public class Profile
     // Snatch configuration
     public int SnatchSecondsStage { get; set; } = 55;
     public int SnatchSecondsBreak { get; set; } = 840;
+    public int SnatchSecondsPresentationLift { get; set; } = 180;
     public int SnatchOpenerWeight { get; set; } = 85;
     public bool SnatchOpenerInWarmup { get; set; } = true;
     public int SnatchSecondsEnd { get; set; } = 60;
@@ -201,6 +202,17 @@ public class Profile
     }
 
     /// <summary>
+    /// Extra time (in minutes, 0–60 min) added to the Snatch warmup lift active when competition starts
+    /// (lifters called out for athlete presentation). Defaults to 3 minutes (180 seconds).
+    /// </summary>
+    [JsonIgnore]
+    public int SnatchMinutesPresentationLift
+    {
+        get => Math.Max(0, SnatchSecondsPresentationLift / 60);
+        set => SnatchSecondsPresentationLift = Math.Clamp(value, 0, 60) * 60;
+    }
+
+    /// <summary>
     /// Break after snatch expressed in minutes (1–200 min) for the Setup UI,
     /// matching the original WinForms numeric up/down which displayed minutes and stored seconds.
     /// </summary>
@@ -221,6 +233,7 @@ public class Profile
             Beep = Beep,
             SnatchSecondsStage = SnatchSecondsStage,
             SnatchSecondsBreak = SnatchSecondsBreak,
+            SnatchSecondsPresentationLift = SnatchSecondsPresentationLift,
             SnatchOpenerWeight = SnatchOpenerWeight,
             SnatchOpenerInWarmup = SnatchOpenerInWarmup,
             SnatchSecondsEnd = SnatchSecondsEnd,

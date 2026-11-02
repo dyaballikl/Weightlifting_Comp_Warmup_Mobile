@@ -17,8 +17,8 @@
     <!-- Display name & identifiers -->
     <ApplicationTitle>Comp OWL</ApplicationTitle>
     <ApplicationId>com.weightlifting.compwarmup</ApplicationId>
-    <ApplicationDisplayVersion>2.0.29</ApplicationDisplayVersion>
-    <ApplicationVersion>31</ApplicationVersion>
+    <ApplicationDisplayVersion>2.0.30</ApplicationDisplayVersion>
+    <ApplicationVersion>32</ApplicationVersion>
 
     <!-- Supported OS versions for Phone, Tablet & Desktop preview -->
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
@@ -28,6 +28,8 @@
 
     <!-- Package as standalone APK on Android and IPA on iOS -->
     <AndroidPackageFormat Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">apk</AndroidPackageFormat>
+    <AndroidLinkTool Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android' and '$(Configuration)' == 'Release'">r8</AndroidLinkTool>
+    <AndroidR8ObfuscationMode Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android' and '$(Configuration)' == 'Release'">private-members</AndroidR8ObfuscationMode>
     <BuildIpa Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios' and '$(Configuration)' == 'Release'">true</BuildIpa>
   </PropertyGroup>
 

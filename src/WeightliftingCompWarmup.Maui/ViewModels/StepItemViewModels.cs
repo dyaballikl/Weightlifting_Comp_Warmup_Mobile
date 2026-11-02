@@ -57,6 +57,7 @@ public class LiveStepItemViewModel : INotifyPropertyChanged
     public bool IsLift { get; init; }
     public bool IsPreStep { get; init; }
     public bool IsOpener { get; init; }
+    public bool IsNotOpener => !IsOpener;
 
     public string ActionTitle
     {
@@ -110,7 +111,9 @@ public class LiveStepItemViewModel : INotifyPropertyChanged
                 _status = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsActive));
+                OnPropertyChanged(nameof(ShowActiveProgressBar));
                 OnPropertyChanged(nameof(IsCompleted));
+                OnPropertyChanged(nameof(OpenerCalloutText));
                 OnPropertyChanged(nameof(RowBackgroundHex));
                 OnPropertyChanged(nameof(RowBorderHex));
                 OnPropertyChanged(nameof(PrimaryTextHex));
@@ -123,7 +126,14 @@ public class LiveStepItemViewModel : INotifyPropertyChanged
     }
 
     public bool IsActive => Status == StepRunStatus.Active;
+    public bool ShowActiveProgressBar => IsActive && !IsOpener;
     public bool IsCompleted => Status == StepRunStatus.Completed;
+    public string OpenerCalloutText => Status switch
+    {
+        StepRunStatus.Active => "OPEN NOW!",
+        StepRunStatus.Completed => "DONE",
+        _ => string.IsNullOrWhiteSpace(CountdownBadgeText) ? "OPENER" : $"OPEN {CountdownBadgeText}"
+    };
 
     // Matches WinForms Yellow highlight for active step with high-contrast dark text
     public string RowBackgroundHex => Status switch
@@ -221,6 +231,7 @@ public class LiveStepItemViewModel : INotifyPropertyChanged
             {
                 _countdownBadgeText = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(OpenerCalloutText));
             }
         }
     }

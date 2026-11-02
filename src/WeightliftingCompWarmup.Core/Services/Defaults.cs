@@ -15,6 +15,7 @@ public static class Defaults
     // Snatch defaults
     public const int DefaultSnatchSecondsStage = 55;
     public const int DefaultSnatchSecondsBreak = 840; // 14 minutes (presentation + 10m clock)
+    public const int DefaultSnatchSecondsPresentationLift = 180; // 3 minutes added to lift active at presentation
     public const int DefaultSnatchOpenerWeight = 20;
     public const bool DefaultSnatchOpenerInWarmup = false;
     public const int DefaultSnatchSecondsEnd = 60;
@@ -54,6 +55,7 @@ public static class Defaults
             // Snatch Demo
             SnatchSecondsStage = DefaultSnatchSecondsStage,
             SnatchSecondsBreak = DefaultSnatchSecondsBreak,
+            SnatchSecondsPresentationLift = DefaultSnatchSecondsPresentationLift,
             SnatchOpenerWeight = DemoSnatchOpenerWeight,
             SnatchOpenerInWarmup = DemoSnatchOpenerInWarmup,
             SnatchSecondsEnd = DemoSnatchSecondsEnd,
@@ -123,6 +125,7 @@ public static class Defaults
 
             SnatchSecondsStage = DefaultSnatchSecondsStage,
             SnatchSecondsBreak = DefaultSnatchSecondsBreak,
+            SnatchSecondsPresentationLift = DefaultSnatchSecondsPresentationLift,
             SnatchOpenerWeight = DefaultSnatchOpenerWeight,
             SnatchOpenerInWarmup = DefaultSnatchOpenerInWarmup,
             SnatchSecondsEnd = DefaultSnatchSecondsEnd,

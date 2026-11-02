@@ -10,6 +10,7 @@ public class SavedAppState
 {
     public string LastUsedProfileName { get; set; } = "Demo Profile";
     public bool HasSeenWelcomeHelp { get; set; }
+    public string? LastSeenAppVersion { get; set; }
     public string ThemePreference { get; set; } = "System";
     public List<Profile> Profiles { get; set; } = new();
 }
@@ -35,6 +36,7 @@ public class ProfileStorageService
     public List<Profile> Profiles { get; private set; } = new();
     public Profile ActiveProfile { get; private set; } = Defaults.CreateDemoProfile();
     public bool HasSeenWelcomeHelp { get; private set; }
+    public string? LastSeenAppVersion { get; private set; }
     public string ThemePreference { get; private set; } = "System";
 
     public ProfileStorageService(string? storageFilePath = null)
@@ -76,6 +78,9 @@ public class ProfileStorageService
                         EnsureBaselineRules(profile);
                     }
                     HasSeenWelcomeHelp = state.HasSeenWelcomeHelp;
+                    LastSeenAppVersion = !string.IsNullOrWhiteSpace(state.LastSeenAppVersion)
+                        ? state.LastSeenAppVersion.Trim()
+                        : (state.HasSeenWelcomeHelp ? AppChangelog.LegacyBaselineVersion : null);
                     ThemePreference = NormalizeThemePreference(state.ThemePreference);
                     ActiveProfile = Profiles.FirstOrDefault(p =>
                         string.Equals(p.Name, state.LastUsedProfileName, StringComparison.OrdinalIgnoreCase))
@@ -93,15 +98,69 @@ public class ProfileStorageService
     }
 
     /// <summary>
-    /// Marks the welcome help screen as seen and persists the flag to disk.
+    /// Marks the welcome help screen as seen and persists the flag (and current app version) to disk.
     /// </summary>
-    public void MarkWelcomeHelpSeen()
+    public void MarkWelcomeHelpSeen(string? currentAppVersion = null)
     {
+        bool changed = false;
         if (!HasSeenWelcomeHelp)
         {
             HasSeenWelcomeHelp = true;
+            changed = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentAppVersion) && string.IsNullOrWhiteSpace(LastSeenAppVersion))
+        {
+            LastSeenAppVersion = currentAppVersion.Trim();
+            changed = true;
+        }
+
+        if (changed)
+        {
             Save();
         }
+    }
+
+    /// <summary>
+    /// Checks whether the app has updated since the user last opened it (skipping if first open),
+    /// updates <see cref="LastSeenAppVersion"/> to <paramref name="currentAppVersion"/>, and returns
+    /// the release notes since the previous version.
+    /// </summary>
+    public (bool HasUpdated, string PreviousVersion, IReadOnlyList<AppReleaseNote> Notes) ConsumeWhatsNewIfUpdated(string currentAppVersion)
+    {
+        if (string.IsNullOrWhiteSpace(currentAppVersion))
+        {
+            return (false, string.Empty, []);
+        }
+
+        string trimmedCurrent = currentAppVersion.Trim();
+
+        // Skip on first open ever
+        if (!HasSeenWelcomeHelp)
+        {
+            LastSeenAppVersion = trimmedCurrent;
+            return (false, string.Empty, []);
+        }
+
+        string effectivePrevious = string.IsNullOrWhiteSpace(LastSeenAppVersion)
+            ? AppChangelog.LegacyBaselineVersion
+            : LastSeenAppVersion.Trim();
+
+        var notes = AppChangelog.GetChangesSince(effectivePrevious, trimmedCurrent);
+        if (notes.Count == 0)
+        {
+            if (!string.Equals(LastSeenAppVersion, trimmedCurrent, StringComparison.OrdinalIgnoreCase))
+            {
+                LastSeenAppVersion = trimmedCurrent;
+                Save();
+            }
+
+            return (false, effectivePrevious, []);
+        }
+
+        LastSeenAppVersion = trimmedCurrent;
+        Save();
+        return (true, effectivePrevious, notes);
     }
 
     /// <summary>
@@ -142,6 +201,7 @@ public class ProfileStorageService
         {
             LastUsedProfileName = ActiveProfile.Name,
             HasSeenWelcomeHelp = HasSeenWelcomeHelp,
+            LastSeenAppVersion = LastSeenAppVersion,
             ThemePreference = ThemePreference,
             Profiles = Profiles
         };
@@ -164,6 +224,7 @@ public class ProfileStorageService
         {
             LastUsedProfileName = ActiveProfile.Name,
             HasSeenWelcomeHelp = HasSeenWelcomeHelp,
+            LastSeenAppVersion = LastSeenAppVersion,
             ThemePreference = ThemePreference,
             Profiles = Profiles
         };

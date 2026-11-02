@@ -24,6 +24,7 @@ public class MainPage : ContentPage
     private IDispatcherTimer? _timer;
     private DateTime _lastUiTimerTickUtc;
     private bool _isWideLayout;
+    private bool _isShortHeight;
     private bool _layoutInitialized;
     private bool _firstOpenHelpChecked;
     private bool _isInPipMode;
@@ -65,8 +66,8 @@ public class MainPage : ContentPage
                 new RowDefinition { Height = GridLength.Auto }, // Optional Toast/Status Banner
                 new RowDefinition { Height = GridLength.Star }  // Responsive Body (Phone or Tablet)
             },
-            Padding = new Thickness(12, 10, 12, 10),
-            RowSpacing = 8
+            Padding = new Thickness(8, 6, 8, 6),
+            RowSpacing = 6
         };
 
         _headerContainer = new ContentView();
@@ -75,6 +76,9 @@ public class MainPage : ContentPage
 
         _headerContainer.Content = BuildTopNavigationHeader();
         _bannerContainer.Content = BuildBannersStack();
+        RebuildBodyLayout();
+        _layoutInitialized = true;
+
         _rootGrid.Add(_headerContainer, 0, 0);
         _rootGrid.Add(_bannerContainer, 0, 1);
         _rootGrid.Add(_bodyContainer, 0, 2);
@@ -144,9 +148,58 @@ public class MainPage : ContentPage
 
     private View BuildPipMiniTimerOverlay()
     {
+        var compStatusLabel = new Label
+        {
+            FontSize = 10,
+            FontAttributes = FontAttributes.Bold,
+            FontAutoScalingEnabled = false,
+            TextColor = Color.FromArgb("#38BDF8"),
+            HorizontalTextAlignment = TextAlignment.Start,
+            VerticalTextAlignment = TextAlignment.Center,
+            LineBreakMode = LineBreakMode.TailTruncation,
+            MaxLines = 1
+        };
+        compStatusLabel.SetBinding(Label.TextProperty, nameof(MainViewModel.LiveMiniCompStatusText));
+
+        var advanceBtn = new Button
+        {
+            Command = _vm.AdvanceActiveLivePhaseCommand,
+            BackgroundColor = Color.FromArgb("#0284C7"),
+            TextColor = Colors.White,
+            FontSize = 9.5,
+            FontAttributes = FontAttributes.Bold,
+            FontAutoScalingEnabled = false,
+            CornerRadius = 6,
+            Padding = new Thickness(6, 0),
+            HeightRequest = 20,
+            VerticalOptions = LayoutOptions.Center
+        };
+        advanceBtn.SetBinding(Button.TextProperty, nameof(MainViewModel.LiveMiniAdvanceButtonText));
+        advanceBtn.SetBinding(IsVisibleProperty, nameof(MainViewModel.CanAdvanceLiveMiniPhase));
+
+        var topRow = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Auto }
+            },
+            ColumnSpacing = 4,
+            Padding = new Thickness(6, 2, 6, 1)
+        };
+        topRow.Add(compStatusLabel, 0, 0);
+        topRow.Add(advanceBtn, 1, 0);
+
+        var divider = new BoxView
+        {
+            Color = Color.FromArgb("#334155"),
+            HeightRequest = 1,
+            Margin = new Thickness(6, 0)
+        };
+
         var stepLabel = new Label
         {
-            FontSize = 11.5,
+            FontSize = 11,
             FontAttributes = FontAttributes.Bold,
             FontAutoScalingEnabled = false,
             TextColor = Color.FromArgb("#F8FAFC"),
@@ -158,7 +211,7 @@ public class MainPage : ContentPage
 
         var remainingLabel = new Label
         {
-            FontSize = 20,
+            FontSize = 18,
             FontAttributes = FontAttributes.Bold,
             FontAutoScalingEnabled = false,
             TextColor = Color.FromArgb("#FACC15"),
@@ -182,14 +235,18 @@ public class MainPage : ContentPage
         {
             RowDefinitions =
             {
+                new RowDefinition { Height = GridLength.Auto },
+                new RowDefinition { Height = new GridLength(1) },
                 new RowDefinition { Height = GridLength.Star },
                 new RowDefinition { Height = new GridLength(5) }
             }
         };
 
+        contentGrid.Add(topRow, 0, 0);
+        contentGrid.Add(divider, 0, 1);
         contentGrid.Add(new VerticalStackLayout
         {
-            Padding = new Thickness(6, 2),
+            Padding = new Thickness(6, 1),
             Spacing = 0,
             VerticalOptions = LayoutOptions.Center,
             HorizontalOptions = LayoutOptions.Fill,
@@ -198,9 +255,9 @@ public class MainPage : ContentPage
                 stepLabel,
                 remainingLabel
             }
-        }, 0, 0);
+        }, 0, 2);
 
-        contentGrid.Add(progressBar, 0, 1);
+        contentGrid.Add(progressBar, 0, 3);
 
         return new Border
         {
@@ -298,7 +355,7 @@ public class MainPage : ContentPage
             _firstOpenHelpChecked = true;
             if (!_vm.HasSeenWelcomeHelp)
             {
-                _vm.MarkWelcomeHelpSeen();
+                _vm.MarkWelcomeHelpSeen(HelpAboutModalPage.AppVersion);
                 Dispatcher.Dispatch(async () =>
                 {
                     if (Navigation.ModalStack.Count == 0)
@@ -306,6 +363,22 @@ public class MainPage : ContentPage
                         await Navigation.PushModalAsync(new HelpAboutModalPage(startOnAboutTab: false, onSelectTheme: pref => _vm.SetThemePreference(pref)), animated: true);
                     }
                 });
+            }
+            else
+            {
+                var (hasUpdated, previousVersion, notes) = _vm.ConsumeWhatsNewIfUpdated(HelpAboutModalPage.AppVersion);
+                if (hasUpdated && notes.Count > 0)
+                {
+                    Dispatcher.Dispatch(async () =>
+                    {
+                        if (Navigation.ModalStack.Count == 0)
+                        {
+                            await Navigation.PushModalAsync(
+                                new WhatsNewModalPage(HelpAboutModalPage.AppVersion, previousVersion, notes),
+                                animated: true);
+                        }
+                    });
+                }
             }
         }
 
@@ -334,18 +407,46 @@ public class MainPage : ContentPage
             return;
         }
 
-        bool shouldBeWide = width >= 760 ||
-                           (DeviceInfo.Current.Idiom == DeviceIdiom.Tablet && width >= 680);
+        // Require sufficient vertical height (>= 540dp) so phones in landscape stay on the single-column scrollable layout
+        bool shouldBeWide = height >= 540 && (width >= 760 ||
+                           (DeviceInfo.Current.Idiom == DeviceIdiom.Tablet && width >= 680));
+        bool shouldBeShortHeight = height < 540;
 
-        if (!_layoutInitialized || shouldBeWide != _isWideLayout)
+        bool wideChanged = !_layoutInitialized || shouldBeWide != _isWideLayout;
+        bool shortHeightChanged = shouldBeShortHeight != _isShortHeight;
+
+        if (!wideChanged && !shortHeightChanged)
         {
-            _layoutInitialized = true;
-            _isWideLayout = shouldBeWide;
+            return;
+        }
+
+        _layoutInitialized = true;
+        _isWideLayout = shouldBeWide;
+        _isShortHeight = shouldBeShortHeight;
+
+        bool rebuildHeader = wideChanged;
+        bool rebuildBody = wideChanged || (shortHeightChanged && _vm.IsLiveMode);
+
+        if (!rebuildHeader && !rebuildBody)
+        {
+            return;
+        }
+
+        Dispatcher.Dispatch(() =>
+        {
             _rootGrid.Padding = _isWideLayout ? new Thickness(12, 10, 12, 10) : new Thickness(8, 6, 8, 6);
             _rootGrid.RowSpacing = _isWideLayout ? 8 : 6;
-            _headerContainer.Content = BuildTopNavigationHeader();
-            RebuildBodyLayout();
-        }
+
+            if (rebuildHeader)
+            {
+                _headerContainer.Content = BuildTopNavigationHeader();
+            }
+
+            if (rebuildBody)
+            {
+                RebuildBodyLayout();
+            }
+        });
     }
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -487,12 +588,27 @@ public class MainPage : ContentPage
     private View BuildTopNavigationHeader()
     {
         bool compact = !_isWideLayout;
+        int rowHeight = compact ? 34 : 40;
+        int rowSpacing = compact ? 6 : 8;
         var headerCard = CreateCardBorder(padding: compact ? new Thickness(8, 6) : new Thickness(12, 10));
-        var stack = new VerticalStackLayout { Spacing = compact ? 6 : 8 };
+        var headerGrid = new Grid
+        {
+            RowDefinitions =
+            {
+                new RowDefinition { Height = new GridLength(rowHeight) },
+                new RowDefinition { Height = new GridLength(rowHeight) }
+            },
+            RowSpacing = rowSpacing,
+            HeightRequest = (rowHeight * 2) + rowSpacing
+        };
 
         // Row 1: Active Profile Button + Global Settings (Bar Weight + Beep + Theme + Help/About)
         var topRow = new Grid
         {
+            RowDefinitions =
+            {
+                new RowDefinition { Height = new GridLength(rowHeight) }
+            },
             ColumnDefinitions =
             {
                 new ColumnDefinition { Width = GridLength.Star },
@@ -501,7 +617,8 @@ public class MainPage : ContentPage
                 new ColumnDefinition { Width = GridLength.Auto },
                 new ColumnDefinition { Width = GridLength.Auto }
             },
-            ColumnSpacing = compact ? 4 : 8
+            ColumnSpacing = compact ? 4 : 8,
+            HeightRequest = rowHeight
         };
 
         var profileBtn = new Button
@@ -514,7 +631,7 @@ public class MainPage : ContentPage
             FontSize = compact ? 12 : 13,
             CornerRadius = 8,
             Padding = compact ? new Thickness(4, 2) : new Thickness(12, 6),
-            HeightRequest = compact ? 34 : 40,
+            HeightRequest = rowHeight,
             HorizontalOptions = compact ? LayoutOptions.Fill : LayoutOptions.Start
         };
         profileBtn.SetBinding(Button.TextProperty, new Binding(nameof(MainViewModel.ActiveProfileName), stringFormat: "👤 {0} ▾"));
@@ -530,7 +647,7 @@ public class MainPage : ContentPage
             FontAttributes = FontAttributes.Bold,
             CornerRadius = 8,
             Padding = compact ? new Thickness(6, 2) : new Thickness(10, 6),
-            HeightRequest = compact ? 34 : 40
+            HeightRequest = rowHeight
         };
         barBtn.SetBinding(Button.TextProperty, new Binding(nameof(MainViewModel.BarbellWeight), stringFormat: compact ? "🏋️ {0}kg" : "🏋️ Bar: {0}kg"));
         barBtn.Clicked += OnEditBarbellWeightClicked;
@@ -543,7 +660,7 @@ public class MainPage : ContentPage
             FontSize = compact ? 11.5 : 12,
             CornerRadius = 8,
             Padding = compact ? new Thickness(6, 2) : new Thickness(10, 6),
-            HeightRequest = compact ? 34 : 40
+            HeightRequest = rowHeight
         };
         beepBtn.Clicked += (_, _) => _vm.BeepOnNextLift = !_vm.BeepOnNextLift;
         _beepHeaderBtn = beepBtn;
@@ -557,7 +674,7 @@ public class MainPage : ContentPage
             FontAttributes = FontAttributes.Bold,
             CornerRadius = 8,
             Padding = compact ? new Thickness(6, 2) : new Thickness(10, 6),
-            HeightRequest = compact ? 34 : 40,
+            HeightRequest = rowHeight,
             Command = _vm.CycleThemeCommand
         };
         _themeHeaderBtn = themeBtn;
@@ -573,7 +690,7 @@ public class MainPage : ContentPage
             FontSize = compact ? 11.5 : 12,
             CornerRadius = 8,
             Padding = compact ? new Thickness(7, 2) : new Thickness(10, 6),
-            HeightRequest = compact ? 34 : 40
+            HeightRequest = rowHeight
         };
         helpBtn.Clicked += OnHelpAboutClicked;
 
@@ -586,6 +703,10 @@ public class MainPage : ContentPage
         // Row 2: Discipline Selector (SNATCH vs CLEAN & JERK) + Mode Selector (SETUP vs LIVE)
         var navRow = new Grid
         {
+            RowDefinitions =
+            {
+                new RowDefinition { Height = new GridLength(rowHeight) }
+            },
             ColumnDefinitions =
             {
                 new ColumnDefinition { Width = GridLength.Star },
@@ -594,7 +715,8 @@ public class MainPage : ContentPage
                 new ColumnDefinition { Width = GridLength.Star },
                 new ColumnDefinition { Width = GridLength.Star }
             },
-            ColumnSpacing = compact ? 4 : 6
+            ColumnSpacing = compact ? 4 : 6,
+            HeightRequest = rowHeight
         };
 
         var snatchTabBtn = CreateSegmentButton("SNATCH", _vm.SelectSnatchCommand);
@@ -602,14 +724,11 @@ public class MainPage : ContentPage
         var setupModeBtn = CreateSegmentButton("⚙️ SETUP", _vm.SwitchToSetupCommand);
         var liveModeBtn = CreateSegmentButton(compact ? "🔴 LIVE" : "🔴 LIVE RUNNER", _vm.StartLiveCommand);
 
-        if (compact)
+        foreach (var b in new[] { snatchTabBtn, cjTabBtn, setupModeBtn, liveModeBtn })
         {
-            foreach (var b in new[] { snatchTabBtn, cjTabBtn, setupModeBtn, liveModeBtn })
-            {
-                b.FontSize = 11.5;
-                b.Padding = new Thickness(4, 2);
-                b.HeightRequest = 34;
-            }
+            b.FontSize = compact ? 11.5 : 12;
+            b.Padding = compact ? new Thickness(4, 2) : new Thickness(8, 4);
+            b.HeightRequest = rowHeight;
         }
 
         _snatchHeaderBtn = snatchTabBtn;
@@ -624,9 +743,9 @@ public class MainPage : ContentPage
         navRow.Add(setupModeBtn, 3, 0);
         navRow.Add(liveModeBtn, 4, 0);
 
-        stack.Add(topRow);
-        stack.Add(navRow);
-        headerCard.Content = stack;
+        headerGrid.Add(topRow, 0, 0);
+        headerGrid.Add(navRow, 0, 1);
+        headerCard.Content = headerGrid;
         return headerCard;
     }
 
@@ -800,16 +919,16 @@ public class MainPage : ContentPage
             ColumnSpacing = 12
         };
 
-        // Left Column: Parameters + Opener Barbell + Calculated Warmup Steps
+        // Left Column: Parameters (with Opener Barbell) + Calculated Warmup Steps
         var leftScroll = new ScrollView
         {
             Content = new VerticalStackLayout
             {
                 Spacing = 10,
+                Padding = new Thickness(0, 0, 0, 20),
                 Children =
                 {
                     BuildLiftParametersCard(),
-                    BuildOpenerBarbellCard(),
                     BuildPreviewStepsCard()
                 }
             }
@@ -821,6 +940,7 @@ public class MainPage : ContentPage
             Content = new VerticalStackLayout
             {
                 Spacing = 10,
+                Padding = new Thickness(0, 0, 0, 20),
                 Children =
                 {
                     BuildExtrasEditorCard(),
@@ -879,10 +999,10 @@ public class MainPage : ContentPage
             scroll.Content = new VerticalStackLayout
             {
                 Spacing = 8,
+                Padding = new Thickness(0, 0, 0, 20),
                 Children =
                 {
                     BuildLiftParametersCard(),
-                    BuildOpenerBarbellCard(),
                     BuildPreviewStepsCard()
                 }
             };
@@ -892,6 +1012,7 @@ public class MainPage : ContentPage
             scroll.Content = new VerticalStackLayout
             {
                 Spacing = 8,
+                Padding = new Thickness(0, 0, 0, 20),
                 Children =
                 {
                     BuildExtrasEditorCard(),
@@ -1075,6 +1196,27 @@ public class MainPage : ContentPage
             stack.Add(openerRow);
         }
 
+        // Competition Opener Barbell Graphic directly under Opener Weight input
+        var openerBarbellBorder = new Border
+        {
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            Stroke = AppThemeManager.Color("#334155"),
+            StrokeThickness = 1,
+            StrokeShape = new RoundRectangle { CornerRadius = 8 },
+            Padding = compact ? new Thickness(8, 4) : new Thickness(10, 6)
+        };
+        var openerBarbellView = new BarbellPlateView
+        {
+            IsOpener = true,
+            IsFullBarbell = true,
+            HeightRequest = compact ? 72 : 88,
+            HorizontalOptions = LayoutOptions.Fill
+        };
+        openerBarbellView.SetBinding(BarbellPlateView.LiftWeightProperty, nameof(MainViewModel.OpenerWeight));
+        openerBarbellView.SetBinding(BarbellPlateView.BarWeightProperty, nameof(MainViewModel.BarbellWeight));
+        openerBarbellBorder.Content = openerBarbellView;
+        stack.Add(openerBarbellBorder);
+
         // Hit Opener in Warmup Switch
         var hitOpenerRow = new Grid
         {
@@ -1161,6 +1303,14 @@ public class MainPage : ContentPage
                 unitSuffix: "min",
                 adjustCommand: _vm.AdjustSnatchBreakMinutesCommand,
                 onTapEdit: OnEditSnatchBreakMinutesClicked));
+
+            stack.Add(BuildStepperParamRow(
+                title: "Presentation lift buffer (min)",
+                subtitle: "Extra time added to lift active at comp start",
+                bindingPath: nameof(MainViewModel.SnatchPresentationLiftMinutes),
+                unitSuffix: "min",
+                adjustCommand: _vm.AdjustSnatchPresentationLiftMinutesCommand,
+                onTapEdit: OnEditSnatchPresentationLiftMinutesClicked));
         }
 
         // Clean & Jerk specific: Break After Snatch (min) & Snatch Attempts Remaining
@@ -1211,25 +1361,6 @@ public class MainPage : ContentPage
             largeStep: "5"));
 
         card.Content = stack;
-        return card;
-    }
-
-    private View BuildOpenerBarbellCard()
-    {
-        bool compact = !_isWideLayout;
-        var card = CreateCardBorder(padding: compact ? new Thickness(10, 6) : new Thickness(12, 8));
-
-        var barbellView = new BarbellPlateView
-        {
-            IsOpener = true,
-            IsFullBarbell = true,
-            HeightRequest = compact ? 76 : 92,
-            HorizontalOptions = LayoutOptions.Fill
-        };
-        barbellView.SetBinding(BarbellPlateView.LiftWeightProperty, nameof(MainViewModel.OpenerWeight));
-        barbellView.SetBinding(BarbellPlateView.BarWeightProperty, nameof(MainViewModel.BarbellWeight));
-
-        card.Content = barbellView;
         return card;
     }
 
@@ -2022,6 +2153,23 @@ public class MainPage : ContentPage
 
     private View BuildPhoneLiveLayout()
     {
+        if (_isShortHeight)
+        {
+            var landscapeStack = new VerticalStackLayout
+            {
+                Spacing = 6,
+                Padding = new Thickness(0, 0, 0, 40),
+                Children =
+                {
+                    BuildLiveControlDeckCard(),
+                    BuildLiveStepsListCard()
+                }
+            };
+            var landscapeScroll = new ScrollView { Content = landscapeStack };
+            _liveStepsScrollView = landscapeScroll;
+            return landscapeScroll;
+        }
+
         var grid = new Grid
         {
             RowDefinitions =
@@ -2675,6 +2823,7 @@ public class MainPage : ContentPage
                 },
                 ColumnSpacing = compact ? 5 : 8
             };
+            rowGrid.SetBinding(IsVisibleProperty, nameof(LiveStepItemViewModel.IsNotOpener));
 
             var weightLbl = new Label
             {
@@ -2739,6 +2888,66 @@ public class MainPage : ContentPage
             badgeLbl.SetBinding(Label.TextProperty, nameof(LiveStepItemViewModel.CountdownBadgeText));
             badgeBorder.Content = badgeLbl;
 
+            // Dedicated prominent layout for the final Competition Opener card:
+            // Weight on left | Full competition barbell graphic in middle | Untruncated "OPEN NOW!" badge on right (no progress bar)
+            var openerGrid = new Grid
+            {
+                ColumnDefinitions =
+                {
+                    new ColumnDefinition { Width = GridLength.Auto },
+                    new ColumnDefinition { Width = GridLength.Star },
+                    new ColumnDefinition { Width = GridLength.Auto }
+                },
+                ColumnSpacing = compact ? 8 : 12,
+                Padding = new Thickness(0, compact ? 2 : 4)
+            };
+            openerGrid.SetBinding(IsVisibleProperty, nameof(LiveStepItemViewModel.IsOpener));
+
+            var openerWeightLbl = new Label
+            {
+                FontAttributes = FontAttributes.Bold,
+                FontSize = compact ? 16 : 18,
+                VerticalTextAlignment = TextAlignment.Center,
+                MaxLines = 1,
+                LineBreakMode = LineBreakMode.NoWrap
+            };
+            openerWeightLbl.SetBinding(Label.TextProperty, nameof(LiveStepItemViewModel.WeightDisplay));
+
+            var openerFullBarbellView = new BarbellPlateView
+            {
+                IsOpener = true,
+                IsFullBarbell = true,
+                HeightRequest = compact ? 52 : 64,
+                HorizontalOptions = LayoutOptions.Fill,
+                VerticalOptions = LayoutOptions.Center
+            };
+            openerFullBarbellView.SetBinding(BarbellPlateView.LiftWeightProperty, nameof(LiveStepItemViewModel.WeightKg));
+            openerFullBarbellView.SetBinding(BarbellPlateView.BarWeightProperty, nameof(LiveStepItemViewModel.BarbellWeight));
+
+            var openerCalloutBorder = new Border
+            {
+                StrokeShape = new RoundRectangle { CornerRadius = 8 },
+                StrokeThickness = 0,
+                Padding = compact ? new Thickness(10, 6) : new Thickness(14, 8),
+                HorizontalOptions = LayoutOptions.End,
+                VerticalOptions = LayoutOptions.Center
+            };
+            var openerCalloutLbl = new Label
+            {
+                FontAttributes = FontAttributes.Bold,
+                FontSize = compact ? 13 : 15,
+                HorizontalTextAlignment = TextAlignment.Center,
+                VerticalTextAlignment = TextAlignment.Center,
+                MaxLines = 1,
+                LineBreakMode = LineBreakMode.NoWrap
+            };
+            openerCalloutLbl.SetBinding(Label.TextProperty, nameof(LiveStepItemViewModel.OpenerCalloutText));
+            openerCalloutBorder.Content = openerCalloutLbl;
+
+            openerGrid.Add(openerWeightLbl, 0, 0);
+            openerGrid.Add(openerFullBarbellView, 1, 0);
+            openerGrid.Add(openerCalloutBorder, 2, 0);
+
             var activeLoadingBar = new ScrubbableProgressBar
             {
                 HeightRequest = compact ? 20 : 24,
@@ -2746,7 +2955,7 @@ public class MainPage : ContentPage
                 FillColorHex = "#16A34A",
                 HorizontalOptions = LayoutOptions.Fill
             };
-            activeLoadingBar.SetBinding(IsVisibleProperty, nameof(LiveStepItemViewModel.IsActive));
+            activeLoadingBar.SetBinding(IsVisibleProperty, nameof(LiveStepItemViewModel.ShowActiveProgressBar));
             activeLoadingBar.SetBinding(ScrubbableProgressBar.ProgressProperty, nameof(LiveStepItemViewModel.ProgressFraction));
             activeLoadingBar.SetBinding(ScrubbableProgressBar.OverlayTextProperty, nameof(LiveStepItemViewModel.ProgressSummaryText));
 
@@ -2758,13 +2967,21 @@ public class MainPage : ContentPage
                 }
 
                 stepBorder.BackgroundColor = Color.FromArgb(item.RowBackgroundHex);
-                stepBorder.Stroke = Color.FromArgb(item.RowBorderHex);
+                stepBorder.Stroke = item.IsOpener && item.Status == StepRunStatus.Upcoming
+                    ? Color.FromArgb("#EAB308")
+                    : Color.FromArgb(item.RowBorderHex);
+                stepBorder.StrokeThickness = item.IsOpener ? (item.IsActive ? 2.5 : 2.0) : 1.5;
+
                 weightLbl.TextColor = Color.FromArgb(item.PrimaryTextHex);
                 actionTitleLbl.TextColor = Color.FromArgb(item.PrimaryTextHex);
                 actionDetailLbl.TextColor = Color.FromArgb(item.SecondaryTextHex);
                 badgeBorder.BackgroundColor = Color.FromArgb(item.BadgeBackgroundHex);
                 badgeLbl.TextColor = Color.FromArgb(item.BadgeTextHex);
                 activeLoadingBar.FillColorHex = item.ProgressColorHex;
+
+                openerWeightLbl.TextColor = Color.FromArgb(item.PrimaryTextHex);
+                openerCalloutBorder.BackgroundColor = Color.FromArgb(item.BadgeBackgroundHex);
+                openerCalloutLbl.TextColor = Color.FromArgb(item.BadgeTextHex);
             }
 
             LiveStepItemViewModel? subscribedVmItem = null;
@@ -2800,16 +3017,24 @@ public class MainPage : ContentPage
             rowGrid.Add(badgeBorder, 3, 0);
 
             stepStack.Add(rowGrid);
+            stepStack.Add(openerGrid);
             stepStack.Add(activeLoadingBar);
 
             stepBorder.Content = stepStack;
             return stepBorder;
         }));
 
-        var scroll = new ScrollView { Content = stepsStack };
         _liveStepsStackLayout = stepsStack;
-        _liveStepsScrollView = scroll;
-        outerGrid.Add(scroll, 0, 1);
+        if (_isShortHeight && !_isWideLayout)
+        {
+            outerGrid.Add(stepsStack, 0, 1);
+        }
+        else
+        {
+            var scroll = new ScrollView { Content = stepsStack };
+            _liveStepsScrollView = scroll;
+            outerGrid.Add(scroll, 0, 1);
+        }
         card.Content = outerGrid;
         return card;
     }
@@ -3103,6 +3328,22 @@ public class MainPage : ContentPage
         if (int.TryParse(res, out int val))
         {
             _vm.SnatchBreakMinutes = val;
+        }
+    }
+
+    private async void OnEditSnatchPresentationLiftMinutesClicked(object? sender, EventArgs e)
+    {
+        string? res = await ShowInputPromptAsync(
+            "Presentation Lift Buffer (min)",
+            "Extra minutes added to the warmup lift you are on when lifters are called out for presentation (0–60):",
+            "Save",
+            "Cancel",
+            initialValue: _vm.SnatchPresentationLiftMinutes.ToString(),
+            keyboard: Keyboard.Numeric);
+
+        if (int.TryParse(res, out int val))
+        {
+            _vm.SnatchPresentationLiftMinutes = val;
         }
     }
 

@@ -27,8 +27,8 @@ public class HelpAboutModalPage : ContentPage
 
     public const string AppShortName = "Comp OWL";
     public const string AppFullName = "Weightlifting Comp Warmup";
-    public const string AppVersion = "2.0.29";
-    public const string AppBuild = "31";
+    public const string AppVersion = "2.0.30";
+    public const string AppBuild = "32";
     public const string AppleAppStoreId = ""; // Populate with numeric App Store Connect ID once created
 
     public HelpAboutModalPage(bool startOnAboutTab = false, Action<string>? onSelectTheme = null)
@@ -464,6 +464,29 @@ public class HelpAboutModalPage : ContentPage
             FontSize = 12,
             HorizontalTextAlignment = TextAlignment.Center
         });
+
+        var whatsNewBtn = new Button
+        {
+            Text = "🎉 What's New / Release Notes",
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            BorderColor = AppThemeManager.Color("#334155"),
+            BorderWidth = 1,
+            TextColor = AppThemeManager.Color("#38BDF8"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 12,
+            CornerRadius = 8,
+            Padding = new Thickness(12, 6),
+            HorizontalOptions = LayoutOptions.Center,
+            Margin = new Thickness(0, 4, 0, 0)
+        };
+        whatsNewBtn.Clicked += async (_, _) =>
+        {
+            var notes = AppChangelog.GetChangesSince("2.0.0", AppVersion);
+            await Navigation.PushModalAsync(
+                new WhatsNewModalPage(AppVersion, string.Empty, notes),
+                animated: true);
+        };
+        heroStack.Add(whatsNewBtn);
 
         heroBorder.Content = heroStack;
         stack.Add(heroBorder);

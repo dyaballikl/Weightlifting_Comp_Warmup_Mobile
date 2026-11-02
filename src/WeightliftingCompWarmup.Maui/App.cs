@@ -1,17 +1,20 @@
 using Microsoft.Maui;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Controls.PlatformConfiguration.AndroidSpecific;
 using WeightliftingCompWarmup.Maui.Services;
 using WeightliftingCompWarmup.Maui.Views;
 
 namespace WeightliftingCompWarmup.Maui;
 
-public class App : Application
+public class App : Microsoft.Maui.Controls.Application
 {
     private readonly MainPage _mainPage;
 
     public App(MainPage mainPage)
     {
         _mainPage = mainPage;
+        this.On<Microsoft.Maui.Controls.PlatformConfiguration.Android>()
+            .UseWindowSoftInputModeAdjust(WindowSoftInputModeAdjust.Resize);
         AppThemeManager.Initialize(AppThemeManager.CurrentPreference);
         RequestedThemeChanged += (_, _) => AppThemeManager.RefreshFromSystemTheme();
     }

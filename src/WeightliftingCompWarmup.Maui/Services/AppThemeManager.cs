@@ -124,9 +124,15 @@ public static class AppThemeManager
             var statusBarColor = IsLightTheme
                 ? Android.Graphics.Color.ParseColor("#E2E8F0")
                 : Android.Graphics.Color.ParseColor("#0B1120");
+
+            window.DecorView?.SetBackgroundColor(statusBarColor);
+
 #pragma warning disable CA1422, CS0618
-            window.SetStatusBarColor(statusBarColor);
-            window.SetNavigationBarColor(statusBarColor);
+            if (!OperatingSystem.IsAndroidVersionAtLeast(35))
+            {
+                window.SetStatusBarColor(statusBarColor);
+                window.SetNavigationBarColor(statusBarColor);
+            }
 
             if (OperatingSystem.IsAndroidVersionAtLeast(30))
             {
