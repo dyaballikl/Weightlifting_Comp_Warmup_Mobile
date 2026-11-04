@@ -101,23 +101,13 @@ foreach ($subDir in @("resizetizer", "flat", "flata", "res")) {
     }
 }
 
-if (-not $PlayStoreBundleOnly) {
-    Write-Host "=== 1. Packaging Android Release APK (v$DisplayVersion) ===" -ForegroundColor Cyan
-    dotnet publish $MauiProject -f net10.0-android -c Release -p:AndroidPackageFormat=apk
-
-    $SignedApk = Join-Path $ProjectRoot "src\WeightliftingCompWarmup.Maui\bin\Release\net10.0-android\publish\com.weightlifting.compwarmup-Signed.apk"
-    if (Test-Path $SignedApk) {
-        $DestApk = Join-Path $AndroidOutDir "WeightliftingCompWarmup-$DisplayVersion-Signed.apk"
-        Copy-Item $SignedApk $DestApk -Force
-        Write-Host "Android APK ready: $DestApk" -ForegroundColor Green
-    }
-}
-
 $KeystorePath = Join-Path $PlayStoreOutDir "comp-owl-upload.keystore"
 $CredsPath = Join-Path $PlayStoreOutDir "KEYSTORE_CREDENTIALS.txt"
-if (Test-Path $KeystorePath) {
-    Write-Host ""
-    Write-Host "=== Packaging Google Play Store Release AAB (v$DisplayVersion, build $VersionCode) ===" -ForegroundColor Cyan
+$HasKeystore = Test-Path $KeystorePath
+$KeyAlias = ""
+$KeyPass = ""
+
+if ($HasKeystore) {
     $CredsRaw = Get-Content -Path $CredsPath -Raw
     $AliasMatch = [regex]::Match($CredsRaw, 'Key Alias\s*:\s*(\S+)')
     $PassMatch = [regex]::Match($CredsRaw, 'Store Password\s*:\s*(\S+)')
@@ -126,6 +116,34 @@ if (Test-Path $KeystorePath) {
     }
     $KeyAlias = $AliasMatch.Groups[1].Value.Trim()
     $KeyPass = $PassMatch.Groups[1].Value.Trim()
+}
+
+if (-not $PlayStoreBundleOnly) {
+    Write-Host "=== 1. Packaging Android Release APK (v$DisplayVersion) ===" -ForegroundColor Cyan
+    if ($HasKeystore) {
+        dotnet publish $MauiProject -f net10.0-android -c Release `
+            -p:AndroidPackageFormat=apk `
+            -p:AndroidKeyStore=true `
+            -p:AndroidSigningKeyStore="$KeystorePath" `
+            -p:AndroidSigningKeyAlias="$KeyAlias" `
+            -p:AndroidSigningKeyPass="$KeyPass" `
+            -p:AndroidSigningStorePass="$KeyPass"
+    } else {
+        dotnet publish $MauiProject -f net10.0-android -c Release -p:AndroidPackageFormat=apk
+    }
+
+    $SignedApk = Join-Path $ProjectRoot "src\WeightliftingCompWarmup.Maui\bin\Release\net10.0-android\publish\com.weightlifting.compwarmup-Signed.apk"
+    if (Test-Path $SignedApk) {
+        Get-ChildItem -Path $AndroidOutDir -Filter "WeightliftingCompWarmup-*-Signed.apk" -ErrorAction SilentlyContinue | Remove-Item -Force
+        $DestApk = Join-Path $AndroidOutDir "WeightliftingCompWarmup-$DisplayVersion-Signed.apk"
+        Copy-Item $SignedApk $DestApk -Force
+        Write-Host "Android APK ready: $DestApk" -ForegroundColor Green
+    }
+}
+
+if ($HasKeystore) {
+    Write-Host ""
+    Write-Host "=== Packaging Google Play Store Release AAB (v$DisplayVersion, build $VersionCode) ===" -ForegroundColor Cyan
 
     dotnet publish $MauiProject -f net10.0-android -c Release `
         -p:AndroidPackageFormat=aab `
@@ -137,6 +155,7 @@ if (Test-Path $KeystorePath) {
 
     $SignedAab = Join-Path $ProjectRoot "src\WeightliftingCompWarmup.Maui\bin\Release\net10.0-android\publish\com.weightlifting.compwarmup-Signed.aab"
     if (Test-Path $SignedAab) {
+        Get-ChildItem -Path $PlayStoreOutDir -Filter "WeightliftingCompWarmup-*-Signed.aab" -ErrorAction SilentlyContinue | Remove-Item -Force
         $DestAab = Join-Path $PlayStoreOutDir "WeightliftingCompWarmup-$DisplayVersion-Signed.aab"
         Copy-Item $SignedAab $DestAab -Force
         Write-Host "Play Store AAB ready: $DestAab" -ForegroundColor Green

@@ -43,11 +43,16 @@ public sealed class AndroidFloatingTimerOverlay
     private IWindowManager? _windowManager;
     private WindowManagerLayoutParams? _layoutParams;
     private LinearLayout? _rootPillView;
+    private GradientDrawable? _pillBgDrawable;
     private TextView? _compStatusTextView;
     private TextView? _advanceBtnView;
+    private GradientDrawable? _closeBgDrawable;
+    private TextView? _closeBtnView;
+    private AView? _dividerView;
     private TextView? _stepTextView;
     private TextView? _remainingTextView;
     private LinearLayout? _platesRow;
+    private GradientDrawable? _trackBgDrawable;
     private AView? _progressFillView;
 
     private string _compStatusText = "Live Warmup";
@@ -60,6 +65,7 @@ public sealed class AndroidFloatingTimerOverlay
     private int _barWeightKg = 20;
     private int _lastRenderedLiftWeightKg = -1;
     private int _lastRenderedBarWeightKg = -1;
+    private bool _lastRenderedSystemLightTheme;
     private float _density = 2.75f;
     private bool _isShowing;
     private bool _tickScheduled;
@@ -203,29 +209,52 @@ public sealed class AndroidFloatingTimerOverlay
         {
             _isShowing = false;
             _rootPillView = null;
+            _pillBgDrawable = null;
             _compStatusTextView = null;
             _advanceBtnView = null;
+            _closeBgDrawable = null;
+            _closeBtnView = null;
+            _dividerView = null;
             _stepTextView = null;
             _remainingTextView = null;
             _platesRow = null;
+            _trackBgDrawable = null;
             _progressFillView = null;
             _lastRenderedLiftWeightKg = -1;
             _lastRenderedBarWeightKg = -1;
         }
     }
 
+    public void RefreshSystemTheme()
+    {
+        if (!_isShowing)
+        {
+            return;
+        }
+
+        _mainHandler.Post(() =>
+        {
+            if (!_isShowing)
+            {
+                return;
+            }
+
+            bool isSystemLight = AppThemeManager.IsSystemLightTheme;
+            _lastRenderedSystemLightTheme = isSystemLight;
+            ApplyThemeToViews(isSystemLight);
+        });
+    }
+
     private LinearLayout BuildPillView(Context ctx, float density)
     {
-        var pillBg = new GradientDrawable();
-        pillBg.SetShape(ShapeType.Rectangle);
-        pillBg.SetCornerRadius(DpToPx(PillCornerRadiusDp, density));
-        pillBg.SetColor(AColor.ParseColor("#F50F172A"));
-        pillBg.SetStroke(Math.Max(1, DpToPx(1.2f, density)), AColor.ParseColor("#334155"));
+        _pillBgDrawable = new GradientDrawable();
+        _pillBgDrawable.SetShape(ShapeType.Rectangle);
+        _pillBgDrawable.SetCornerRadius(DpToPx(PillCornerRadiusDp, density));
 
         var root = new LinearLayout(ctx)
         {
             Orientation = Orientation.Vertical,
-            Background = pillBg,
+            Background = _pillBgDrawable,
             Elevation = DpToPx(8, density)
         };
         root.SetPadding(
@@ -251,7 +280,6 @@ public sealed class AndroidFloatingTimerOverlay
             Ellipsize = TextUtils.TruncateAt.End
         };
         _compStatusTextView.SetSingleLine(true);
-        _compStatusTextView.SetTextColor(AColor.ParseColor("#38BDF8"));
         _compStatusTextView.SetTextSize(ComplexUnitType.Dip, 11.0f);
         _compStatusTextView.SetIncludeFontPadding(false);
         var compStatusParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f);
@@ -290,38 +318,35 @@ public sealed class AndroidFloatingTimerOverlay
         };
 
         int closeSizePx = DpToPx(22, density);
-        var closeBg = new GradientDrawable();
-        closeBg.SetShape(ShapeType.Oval);
-        closeBg.SetColor(AColor.ParseColor("#26FFFFFF"));
+        _closeBgDrawable = new GradientDrawable();
+        _closeBgDrawable.SetShape(ShapeType.Oval);
 
-        var closeBtn = new TextView(ctx)
+        _closeBtnView = new TextView(ctx)
         {
             Text = "✕",
             Typeface = Typeface.DefaultBold,
             Gravity = GravityFlags.Center,
-            Background = closeBg
+            Background = _closeBgDrawable
         };
-        closeBtn.SetTextColor(AColor.ParseColor("#CBD5E1"));
-        closeBtn.SetTextSize(ComplexUnitType.Dip, 10.5f);
-        closeBtn.SetIncludeFontPadding(false);
+        _closeBtnView.SetTextSize(ComplexUnitType.Dip, 10.5f);
+        _closeBtnView.SetIncludeFontPadding(false);
 
         var closeParams = new LinearLayout.LayoutParams(closeSizePx, closeSizePx)
         {
             LeftMargin = DpToPx(6, density)
         };
 
-        closeBtn.Click += (_, _) =>
+        _closeBtnView.Click += (_, _) =>
         {
             Hide();
         };
 
         upperRow.AddView(_compStatusTextView, compStatusParams);
         upperRow.AddView(_advanceBtnView, advanceParams);
-        upperRow.AddView(closeBtn, closeParams);
+        upperRow.AddView(_closeBtnView, closeParams);
 
         // Divider between Competition Status and Active Warmup Step
-        var divider = new AView(ctx);
-        divider.SetBackgroundColor(AColor.ParseColor("#334155"));
+        _dividerView = new AView(ctx);
         var dividerParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MatchParent,
             Math.Max(1, DpToPx(1, density)))
@@ -354,7 +379,6 @@ public sealed class AndroidFloatingTimerOverlay
             Ellipsize = TextUtils.TruncateAt.End
         };
         _stepTextView.SetSingleLine(true);
-        _stepTextView.SetTextColor(AColor.ParseColor("#E2E8F0"));
         _stepTextView.SetTextSize(ComplexUnitType.Dip, 12.0f);
         _stepTextView.SetIncludeFontPadding(false);
 
@@ -364,7 +388,6 @@ public sealed class AndroidFloatingTimerOverlay
             Typeface = Typeface.DefaultBold
         };
         _remainingTextView.SetSingleLine(true);
-        _remainingTextView.SetTextColor(AColor.ParseColor("#FACC15"));
         _remainingTextView.SetTextSize(ComplexUnitType.Dip, 18.0f);
         _remainingTextView.SetIncludeFontPadding(false);
 
@@ -390,14 +413,13 @@ public sealed class AndroidFloatingTimerOverlay
         int barHeightPx = Math.Max(2, DpToPx(ProgressBarHeightDp, density));
         float barRadiusPx = barHeightPx / 2f;
 
-        var trackBg = new GradientDrawable();
-        trackBg.SetShape(ShapeType.Rectangle);
-        trackBg.SetCornerRadius(barRadiusPx);
-        trackBg.SetColor(AColor.ParseColor("#334155"));
+        _trackBgDrawable = new GradientDrawable();
+        _trackBgDrawable.SetShape(ShapeType.Rectangle);
+        _trackBgDrawable.SetCornerRadius(barRadiusPx);
 
         var progressTrack = new FrameLayout(ctx)
         {
-            Background = trackBg
+            Background = _trackBgDrawable
         };
         var trackParams = new LinearLayout.LayoutParams(_trackWidthPx, barHeightPx)
         {
@@ -420,12 +442,50 @@ public sealed class AndroidFloatingTimerOverlay
         progressTrack.AddView(_progressFillView, fillParams);
 
         root.AddView(upperRow, upperRowParams);
-        root.AddView(divider, dividerParams);
+        root.AddView(_dividerView, dividerParams);
         root.AddView(topRow, topRowParams);
         root.AddView(progressTrack, trackParams);
 
+        _lastRenderedSystemLightTheme = AppThemeManager.IsSystemLightTheme;
+        ApplyThemeToViews(_lastRenderedSystemLightTheme);
+
         root.SetOnTouchListener(new PillDragTouchListener(this, density));
         return root;
+    }
+
+    private void ApplyThemeToViews(bool isSystemLight)
+    {
+        try
+        {
+            if (_pillBgDrawable != null)
+            {
+                _pillBgDrawable.SetColor(AColor.ParseColor(isSystemLight ? "#F7FFFFFF" : "#F50F172A"));
+                _pillBgDrawable.SetStroke(
+                    Math.Max(1, DpToPx(1.2f, _density)),
+                    AColor.ParseColor(isSystemLight ? "#94A3B8" : "#334155"));
+            }
+
+            _compStatusTextView?.SetTextColor(AColor.ParseColor(isSystemLight ? "#0284C7" : "#38BDF8"));
+
+            if (_closeBgDrawable != null)
+            {
+                _closeBgDrawable.SetColor(AColor.ParseColor(isSystemLight ? "#E2E8F0" : "#26FFFFFF"));
+            }
+
+            _closeBtnView?.SetTextColor(AColor.ParseColor(isSystemLight ? "#334155" : "#CBD5E1"));
+            _dividerView?.SetBackgroundColor(AColor.ParseColor(isSystemLight ? "#CBD5E1" : "#334155"));
+            _stepTextView?.SetTextColor(AColor.ParseColor(isSystemLight ? "#0F172A" : "#E2E8F0"));
+            _remainingTextView?.SetTextColor(AColor.ParseColor(isSystemLight ? "#B45309" : "#FACC15"));
+
+            if (_trackBgDrawable != null)
+            {
+                _trackBgDrawable.SetColor(AColor.ParseColor(isSystemLight ? "#CBD5E1" : "#334155"));
+            }
+        }
+        catch
+        {
+            // Ignore transient styling errors
+        }
     }
 
     private void ApplyTextAndProgressToViews()
@@ -437,6 +497,13 @@ public sealed class AndroidFloatingTimerOverlay
 
         try
         {
+            bool isSystemLight = AppThemeManager.IsSystemLightTheme;
+            if (isSystemLight != _lastRenderedSystemLightTheme)
+            {
+                _lastRenderedSystemLightTheme = isSystemLight;
+                ApplyThemeToViews(isSystemLight);
+            }
+
             if (_compStatusTextView != null && _compStatusTextView.Text != _compStatusText)
             {
                 _compStatusTextView.Text = _compStatusText;

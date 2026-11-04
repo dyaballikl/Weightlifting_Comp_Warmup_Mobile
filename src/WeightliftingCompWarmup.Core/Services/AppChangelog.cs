@@ -27,6 +27,15 @@ public static class AppChangelog
     private static readonly IReadOnlyList<AppReleaseNote> AllReleases =
     [
         new AppReleaseNote(
+            Version: "2.0.31",
+            Title: "Streamlined Help Guide, System Clock Format & PiP Theme Sync",
+            Changes:
+            [
+                "Streamlined Help & Pro Tips: Redesigned the How to Use guide with a concise 4-step Quick Start and expandable feature & competition tip sections (including handling 2-minute self-follow timers).",
+                "System 12h / 24h Clock Support: Live telemetry clocks (Current Time & Est. Open Time) and the Competition Start Time picker now automatically match your device's AM/PM or 24-hour clock setting.",
+                "System-Matched Floating / PiP Timer Theme: The floating overlay pill and Picture-in-Picture mini-timer now follow your device's system light/dark mode."
+            ]),
+        new AppReleaseNote(
             Version: "2.0.30",
             Title: "Presentation Buffer, Opener Redesign & Floating Timer Controls",
             Changes:

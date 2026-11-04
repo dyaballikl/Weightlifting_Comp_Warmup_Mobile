@@ -79,6 +79,42 @@ public class DevicePlatformService
     }
 
     /// <summary>
+    /// Queries the operating system's current 12-hour (AM/PM) vs. 24-hour clock setting.
+    /// </summary>
+    public static bool IsSystem24HourClock()
+    {
+#if ANDROID
+        try
+        {
+            var context = Android.App.Application.Context;
+            if (context != null)
+            {
+                return Android.Text.Format.DateFormat.Is24HourFormat(context);
+            }
+        }
+        catch
+        {
+            // Fall through to culture check
+        }
+#elif IOS || MACCATALYST
+        try
+        {
+            string? format = Foundation.NSDateFormatter.GetDateFormatFromTemplate("j", 0, Foundation.NSLocale.CurrentLocale);
+            if (!string.IsNullOrEmpty(format))
+            {
+                return !format.Contains('a', StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        catch
+        {
+            // Fall through to culture check
+        }
+#endif
+        var dtf = System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat;
+        return dtf.LongTimePattern.Contains('H') || dtf.ShortTimePattern.Contains('H');
+    }
+
+    /// <summary>
     /// Returns <c>true</c> only when the app was installed from the Google Play Store on Android
     /// or the Apple App Store on iOS. Returns <c>false</c> for sideloaded APKs, simulators, or desktop builds.
     /// </summary>
@@ -292,10 +328,11 @@ public class DevicePlatformService
             if (dialog != null)
             {
                 dialog.Show();
+                bool isSystemLight = AppThemeManager.IsSystemLightTheme;
                 dialog.GetButton((int)Android.Content.DialogButtonType.Positive)
-                    ?.SetTextColor(Android.Graphics.Color.ParseColor("#38BDF8"));
+                    ?.SetTextColor(Android.Graphics.Color.ParseColor(isSystemLight ? "#0284C7" : "#38BDF8"));
                 dialog.GetButton((int)Android.Content.DialogButtonType.Negative)
-                    ?.SetTextColor(Android.Graphics.Color.ParseColor("#E2E8F0"));
+                    ?.SetTextColor(Android.Graphics.Color.ParseColor(isSystemLight ? "#334155" : "#E2E8F0"));
             }
         }
         catch

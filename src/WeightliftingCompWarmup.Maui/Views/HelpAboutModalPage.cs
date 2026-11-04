@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Maui;
@@ -24,11 +25,12 @@ public class HelpAboutModalPage : ContentPage
     private Button _aboutTabBtn = null!;
     private bool _isAboutTabSelected;
     private readonly Action<string>? _onSelectTheme;
+    private readonly HashSet<string> _expandedHelpSections = new(StringComparer.Ordinal);
 
     public const string AppShortName = "Comp OWL";
     public const string AppFullName = "Weightlifting Comp Warmup";
-    public const string AppVersion = "2.0.30";
-    public const string AppBuild = "32";
+    public const string AppVersion = "2.0.31";
+    public const string AppBuild = "33";
     public const string AppleAppStoreId = ""; // Populate with numeric App Store Connect ID once created
 
     public HelpAboutModalPage(bool startOnAboutTab = false, Action<string>? onSelectTheme = null)
@@ -303,107 +305,102 @@ public class HelpAboutModalPage : ContentPage
             Padding = new Thickness(0, 0, 0, 8)
         };
 
-        // Card 1: Purpose Overview
-        stack.Add(CreateInfoCard(
-            badgeText: "WHAT IS COMP OWL FOR?",
-            badgeColorHex: "#38BDF8",
-            title: "Know Exactly When to Lift What in the Warmup Room",
-            body: "Comp OWL (Competition Olympic WeightLifting) helps athletes managing their own warmups — or coaches and handlers managing warmups for another lifter — time every warmup attempt so the athlete is ready at the exact moment they are called to the competition platform for their opener."));
+        // 1. High-Level Quick Start Card (Always Visible & Brief)
+        stack.Add(CreateQuickStartCard());
 
-        // Card 2: Step 1 — Profiles & Bar Setup
-        stack.Add(CreateStepCard(
-            stepNumber: "1",
-            stepTitle: "Choose a Lifter Profile, Bar Weight & Theme",
-            bullets: new[]
-            {
-                "Tap the 👤 Profile button (top-left) to switch lifters, create a new blank profile, duplicate/rename/delete profiles, or export/import a .json backup (e.g., to Google Drive). All profile changes save automatically.",
-                "Tap the 🏋️ Bar button (top-right) to set the barbell weight (20 kg Men's bar, 15 kg Women's bar, or custom youth/technique bar).",
-                "Tap 🔔 Beep to toggle audio alerts when it is time for your next warmup lift.",
-                "Tap 🌓/🌙/☀️ in the top header (or use the Theme bar above) to switch between System, Dark, and Light modes."
-            }));
-
-        // Card 3: Step 2 — Configure Snatch or Clean & Jerk Setup
-        stack.Add(CreateStepCard(
-            stepNumber: "2",
-            stepTitle: "Set Opener, Lifts Out & Warmup Rules (⚙️ SETUP)",
-            bullets: new[]
-            {
-                "Select SNATCH or CLEAN & JERK in the top bar while in ⚙️ SETUP mode.",
-                "Opener Weight: Your planned first competition attempt on the platform. The barbell diagram shows exact IWF plate loading (including 2.5 kg competition collars on openers, and full-size plastic 5 kg white / 2.5 kg red plates below the 10 kg green plate minimum).",
-                "Lifts Out & Stage Lift Time: How many platform attempts are scheduled before your opener. Every attempt ahead of you adds 'Stage lift time' (defaults to 55s for Snatch and 62s for Clean & Jerk) to your available warmup time.",
-                "Extra Time After Last Warmup: Buffer between your final warmup lift and walking out for your platform opener (defaults to 60s; 75s in the Clean & Jerk Demo Profile).",
-                "Rules & Extras: Customize weight jump thresholds (e.g., larger jumps on light weights, smaller jumps near your opener), rest time between warmup sets, and pre-lifting steps (like foam rolling or general mobility). Comp OWL automatically smooths your final 3 warmup jumps."
-            }));
-
-        // Card 4: Step 3 — Pre-Stage Timers (Presentation & Break)
-        stack.Add(CreateStepCard(
-            stepNumber: "3",
-            stepTitle: "Presentation Clock & Mid-Meet Break",
-            bullets: new[]
-            {
-                "Snatch — Presentation & Clock (min): Accounts for athlete line-up, walk-out, introduction, and the standard 10-minute clock after presentation (defaults to 14 min total). Set to 0 if stage lifting is already underway.",
-                "Clean & Jerk — Snatch Remaining & Break: Tracks the remaining Snatch attempts on stage plus the intermission break (usually 10 min) between Snatch and Clean & Jerk so you can start warming up for C&J during the break or late in the Snatch session.",
-                "On phone screens, once 'Snatch Left' and 'Break' are completed in C&J Live, they automatically collapse upward to keep your active C&J warmup schedule front and center (tap a collapsed bar anytime to expand it)."
-            }));
-
-        // Card 5: Step 4 — Running a Live Session
-        stack.Add(CreateStepCard(
-            stepNumber: "4",
-            stepTitle: "Run the Warmup in 🔴 LIVE Mode",
-            bullets: new[]
-            {
-                "Tap 🔴 LIVE to start the session clock. Your device screen will stay awake automatically while the live timer is running.",
-                "Before platform lifting begins, tap 'ADVANCE TO STAGE LIFTING' as soon as the first lifter is called to the bar.",
-                "During platform lifting, tap '⏭️ ADVANCE: NEXT STAGE LIFT' each time a platform attempt finishes, or tap the Lifts Out badge directly to type a new count if the marshaling board changes.",
-                "Watch the highlighted row in your Warmup Schedule: 'ACTIVE NOW' shows the bar weight you should be lifting right now, and 'UP NEXT' counts down the exact time until your next warmup set."
-            }));
-
-        // Card 6 (Bottom): Important Callout — Manual Stage Tracking vs Training Mode
-        var scoreboardCard = new Border
+        // 2. Section Header for Expandable Details & Tips
+        stack.Add(new Label
         {
-            BackgroundColor = AppThemeManager.Color("#1E1B4B"),
-            Stroke = Color.FromArgb("#F59E0B"),
-            StrokeThickness = 1.5,
-            StrokeShape = new RoundRectangle { CornerRadius = 10 },
-            Padding = new Thickness(12, 10)
-        };
-        var scoreboardStack = new VerticalStackLayout { Spacing = 6 };
-        scoreboardStack.Add(new Label
-        {
-            Text = "⚠️ NO AUTOMATIC SCOREBOARD LINK",
-            TextColor = AppThemeManager.Color("#FBBF24"),
+            Text = "FUNCTIONS & COMPETITION TIPS (TAP TO EXPAND)",
+            TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
-            FontSize = 12
+            FontSize = 11,
+            Margin = new Thickness(4, 4, 4, 0)
         });
-        scoreboardStack.Add(new Label
-        {
-            Text = "Comp OWL is NOT linked to the competition venue scoreboard or marshaling system. During a live competition, you must manually advance the stage lifts as attempts happen on stage, or update your 'Lifts Out' count when lifters ahead of you change weights or pass.",
-            TextColor = AppThemeManager.Color("#F8FAFC"),
-            FontSize = 12.5,
-            LineHeight = 1.2
-        });
-        scoreboardStack.Add(new BoxView
-        {
-            HeightRequest = 1,
-            Color = AppThemeManager.Color("#312E81"),
-            Margin = new Thickness(0, 2)
-        });
-        scoreboardStack.Add(new Label
-        {
-            Text = "⏱️ TRAINING / PRACTICE COMPETITION MODE (AUTO-ADVANCE)",
-            TextColor = AppThemeManager.Color("#4ADE80"),
-            FontAttributes = FontAttributes.Bold,
-            FontSize = 11.5
-        });
-        scoreboardStack.Add(new Label
-        {
-            Text = "In the Live screen, you can check 'Auto-advance when stage lift timer hits 0s'. This automatically ticks off a stage lift each time the stage clock expires — perfect for solo training sessions or running a realistic practice competition 1–2 weeks out from meet day!",
-            TextColor = AppThemeManager.Color("#E2E8F0"),
-            FontSize = 12,
-            LineHeight = 1.2
-        });
-        scoreboardCard.Content = scoreboardStack;
-        stack.Add(scoreboardCard);
+
+        // 3. Expandable Accordion Cards
+        stack.Add(CreateExpandableSectionCard(
+            sectionKey: "tips",
+            title: "💡 Competition Tips & Common Scenarios",
+            subtitle: "Handling 2-minute timers, board changes, early starts & mock meets",
+            accentColorHex: "#FBBF24",
+            bullets: new[]
+            {
+                "2-Minute Clock (Following Yourself): If a lifter on stage follows themselves and gets a 2-minute timer instead of 1 minute, tap '+' on Lifts Out to add 1 extra lift (~1 min) to your countdown. For spread-out sessions where everyone follows themselves, increase 'Stage lift time (sec)' in Setup (e.g., to 95–115s).",
+                "Marshaling Board Changes: When lifters ahead of you change openers or pass, tap '-' or '+' on Lifts Out (or tap the number to type directly). Your warmup schedule recalculates immediately.",
+                "Stage Lifting Starts Early or Late: Tap '⚡ Start Comp Now' (pre-Snatch), '⏭️ ADVANCE TO STAGE LIFTING' (when introductions/break finish early), or tap/drag directly on any clock progress bar to scrub the timer.",
+                "Solo Training & Mock Meets: Turn on 'Auto-Advance (Training)' at the bottom of Live mode so Lifts Out ticks down automatically each time the stage clock hits 0s — ideal for hands-free training or practice meets."
+            }));
+
+        stack.Add(CreateExpandableSectionCard(
+            sectionKey: "setup",
+            title: "⚙️ Setup Parameters (Opener, Clocks & Buffers)",
+            subtitle: "Opener weight, Snatch presentation buffer, C&J break, lifts out & end buffer",
+            accentColorHex: "#38BDF8",
+            bullets: new[]
+            {
+                "Opener Weight & Plate Diagram: Use -5/-1/+1/+5 or tap the weight to type directly. The barbell graphic shows exact IWF color-coded plate loading per side (including 2.5 kg competition collars on openers).",
+                "Hit Opener in Warmup: Toggle ON to include your full opener weight as your final warmup lift, or OFF to stop one weight jump below your opener.",
+                "Competition Start Time (Snatch): Set the scheduled session start time when athlete presentation begins.",
+                "Presentation & Clock (Snatch): Total duration of athlete introductions plus the 10-minute clock before the first Snatch attempt (default 14 min).",
+                "Snatch Presentation Buffer ('Presentation lift buffer'): Extra time (default +3 min) automatically added to whichever Snatch warmup lift is active at Competition Start Time, giving you time to pause warming up, walk out for athlete presentation, and return without falling behind.",
+                "Clean & Jerk — Snatch Remaining & Break: Set 'Snatch attempts remaining' and 'Break after snatch (min)' (default 10 min) so you can start your C&J warmup while Snatches are still finishing on stage and count down seamlessly through the intermission.",
+                "Lifts Out & Stage Lift Time: 'Lifts out' is the number of platform attempts before your opener; each adds 'Stage lift time (sec)' (default 55s Snatch / 62s C&J) to your countdown.",
+                "Extra Time After Last Warmup (End Buffer): Buffer between finishing your final warmup lift and walking out to the platform for your opener (default 60s Snatch / 75s C&J)."
+            }));
+
+        stack.Add(CreateExpandableSectionCard(
+            sectionKey: "rules",
+            title: "⚖️ Weight Jumps, Lift Times, Extras & Preview",
+            subtitle: "Jump rules (with smoothing), rest intervals, mobility steps & schedule table",
+            accentColorHex: "#38BDF8",
+            bullets: new[]
+            {
+                "Warmup Extras (Pre-Barbell Prep): Add mobility or prep steps before your first barbell set (e.g., Foam Roll, Mobility, Shoes/Knee Sleeves) with custom durations in seconds. Tap any step's name or time to edit, reorder with ▲ / ▼, or delete with ✕.",
+                "Weight Jumps Table: Set how many kilos to jump from each weight threshold (e.g., +20 kg from 1 kg, +10 kg from 40 kg, +5 kg from 70 kg). Tap any rule to edit its threshold or jump size.",
+                "Automatic Final-3-Jump Smoothing: Comp OWL automatically smooths your final 3 warmup jumps so you never take a larger jump right before your opener than earlier in your warmup.",
+                "Warmup Rest / Interval Times: Set the duration per warmup set from each weight threshold (e.g., 2m00s light, 2m30s heavy). Tap any existing rule to edit its weight or time.",
+                "Calculated Warmup Schedule Table: Live preview in Setup showing every warmup step (#, Step name, Weight, IWF sleeve plate graphic, Duration, Total elapsed time, and '-XmYs before opener' reverse timestamp)."
+            }));
+
+        stack.Add(CreateExpandableSectionCard(
+            sectionKey: "live",
+            title: "🔴 Live Runner & Stage Tracking Controls",
+            subtitle: "Telemetry clocks, phase progress bars, scrubbing, Advance, Pause & Reset",
+            accentColorHex: "#4ADE80",
+            bullets: new[]
+            {
+                "Live Telemetry Clocks: Top pills display CURRENT TIME, EST. OPEN TIME (projected clock time of your opener), and TIME TO OPENER (total countdown until you lift on stage).",
+                "Active Warmup Progression: Your current warmup step is highlighted in yellow ('ACTIVE NOW') with a live progress bar and countdown badge, completed steps dim ('✓ DONE'), upcoming steps show 'in XmYs', and your opener displays a full-barbell 'OPEN NOW!' card.",
+                "Tracking Stage Lifts ('⏭️ ADVANCE' & Lifts Out): Tap '⏭️ ADVANCE: NEXT LIFT' (turns red in the final 10s) as each platform attempt finishes, or adjust 'Lifts Out' (- / + or tap to type). Also tracks 'Passed: X' attempts.",
+                "Phase Clocks & Scrubbing: Tap or drag anywhere along the Presentation Clock bar, C&J Snatch Remaining bar, C&J Break bar, or green Stage Lift bar (or tap '⏱ XmYs left') to sync with the venue clock. Completed pre-stage phases collapse automatically on phones (tap to expand).",
+                "Start Comp Now, Pause/Resume & Reset: Tap '⚡ Start Comp Now' if Snatch starts early, '⏸ Pause / ▶ Resume' to freeze or continue the live timer, or '↺ Reset' to restore your initial Setup countdown."
+            }));
+
+        stack.Add(CreateExpandableSectionCard(
+            sectionKey: "pip",
+            title: "🪟 Floating Mini-Timer (PiP), Audio Beep & Wake Lock",
+            subtitle: "Multitasking overlay window, step transition beeps & screen wake lock",
+            accentColorHex: "#38BDF8",
+            bullets: new[]
+            {
+                "Floating Mini-Timer (PiP): Minimize Comp OWL while the Live timer is running to keep a floating overlay on screen showing your active weight/step, progress bar, countdown, Lifts Out, and a one-tap '⏭️ Adv' button. Follows your device's system light/dark mode.",
+                "Audio Beep Alerts ('🔔 Beep'): Toggle '🔔 ON / 🔕 OFF' in the top bar to play an audio alert whenever a warmup step countdown finishes and transitions to the next lift.",
+                "Screen Wake Lock: Comp OWL automatically keeps your screen awake while the Live timer is running so your display never turns off mid-warmup."
+            }));
+
+        stack.Add(CreateExpandableSectionCard(
+            sectionKey: "profiles",
+            title: "👤 Profiles, Barbell Weight, Backups & Theme",
+            subtitle: "Managing lifters, 20kg/15kg bar toggle, JSON export/import & Dark/Light mode",
+            accentColorHex: "#38BDF8",
+            bullets: new[]
+            {
+                "Lifter Profiles ('👤'): Tap the top-left profile button to switch lifters, create a new profile, duplicate, rename, delete, or reset to demo defaults. Every change saves automatically to the active profile.",
+                "Barbell Weight ('🏋️ 20kg / 15kg'): Tap the bar button in the top bar to toggle between a 20 kg (Men's) and 15 kg (Women's) barbell. All warmup steps and IWF plate diagrams update immediately.",
+                "Export & Import Backups (.json): Save all lifter profiles to a .json backup file (e.g., to Google Drive or Files) or restore from a backup anytime via the '👤' Profile menu.",
+                "Appearance Theme ('🌓 Auto / 🌙 Dark / ☀️ Light'): Switch between System (Auto), Dark, and Light themes from the top header bar or the Appearance bar in Help & About."
+            }));
 
         return new ScrollView { Content = stack };
     }
@@ -809,61 +806,168 @@ public class HelpAboutModalPage : ContentPage
         return border;
     }
 
-    private static View CreateStepCard(string stepNumber, string stepTitle, string[] bullets)
+    private static View CreateQuickStartCard()
     {
         var border = new Border
         {
             BackgroundColor = AppThemeManager.Color("#1E293B"),
-            Stroke = AppThemeManager.Color("#334155"),
-            StrokeThickness = 1,
+            Stroke = AppThemeManager.Color("#38BDF8"),
+            StrokeThickness = 1.5,
             StrokeShape = new RoundRectangle { CornerRadius = 10 },
             Padding = new Thickness(14, 12)
         };
 
-        var stack = new VerticalStackLayout { Spacing = 6 };
+        var stack = new VerticalStackLayout { Spacing = 8 };
 
-        var headerRow = new Grid
+        stack.Add(new Label
+        {
+            Text = "⚡ QUICK START — GET GOING IN 4 STEPS",
+            TextColor = AppThemeManager.Color("#38BDF8"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 11.5
+        });
+
+        stack.Add(new Label
+        {
+            Text = "Comp OWL schedules every warmup set backward from your platform opener so you're ready right as your name is called.",
+            TextColor = AppThemeManager.Color("#CBD5E1"),
+            FontSize = 12,
+            LineHeight = 1.15
+        });
+
+        var quickSteps = new (string Number, string Text)[]
+        {
+            ("1", "Profile & Bar: Pick your profile (👤) and bar weight (🏋️ 20 kg / 15 kg) at the top."),
+            ("2", "Setup: Set your Opener Weight, Start/Break Clocks & Buffers, Lifts Out, Weight Jumps, Lift Times, and Extras for SNATCH (then switch to CLEAN & JERK for the second half)."),
+            ("3", "Start Live: Tap 🔴 LIVE to start the countdown and follow the highlighted ACTIVE NOW row."),
+            ("4", "Track the Stage: Not linked to the venue scoreboard — tap ⏭️ ADVANCE as stage lifts finish, or adjust Lifts Out (- / +) when the board changes.")
+        };
+
+        foreach (var (number, text) in quickSteps)
+        {
+            var stepRow = new Grid
+            {
+                ColumnDefinitions =
+                {
+                    new ColumnDefinition { Width = GridLength.Auto },
+                    new ColumnDefinition { Width = GridLength.Star }
+                },
+                ColumnSpacing = 8
+            };
+
+            var badge = new Border
+            {
+                BackgroundColor = Color.FromArgb("#0284C7"),
+                Stroke = AppThemeManager.Color("#38BDF8"),
+                StrokeThickness = 1,
+                StrokeShape = new RoundRectangle { CornerRadius = 6 },
+                WidthRequest = 22,
+                HeightRequest = 22,
+                VerticalOptions = LayoutOptions.Start,
+                Margin = new Thickness(0, 1, 0, 0),
+                Content = new Label
+                {
+                    Text = number,
+                    TextColor = Colors.White,
+                    FontAttributes = FontAttributes.Bold,
+                    FontSize = 11,
+                    HorizontalTextAlignment = TextAlignment.Center,
+                    VerticalTextAlignment = TextAlignment.Center
+                }
+            };
+
+            stepRow.Add(badge, 0, 0);
+            stepRow.Add(BuildFormattedTextLabel(text, 12.5), 1, 0);
+            stack.Add(stepRow);
+        }
+
+        border.Content = stack;
+        return border;
+    }
+
+    private View CreateExpandableSectionCard(
+        string sectionKey,
+        string title,
+        string subtitle,
+        string accentColorHex,
+        string[] bullets)
+    {
+        bool isExpanded = _expandedHelpSections.Contains(sectionKey);
+
+        var border = new Border
+        {
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
+            Stroke = isExpanded ? AppThemeManager.Color(accentColorHex) : AppThemeManager.Color("#334155"),
+            StrokeThickness = isExpanded ? 1.5 : 1,
+            StrokeShape = new RoundRectangle { CornerRadius = 10 },
+            Padding = new Thickness(14, 11)
+        };
+
+        var outerStack = new VerticalStackLayout { Spacing = 0 };
+
+        var headerGrid = new Grid
         {
             ColumnDefinitions =
             {
-                new ColumnDefinition { Width = GridLength.Auto },
-                new ColumnDefinition { Width = GridLength.Star }
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Auto }
             },
             ColumnSpacing = 8
         };
 
-        var badge = new Border
+        var titleStack = new VerticalStackLayout { Spacing = 2 };
+        titleStack.Add(new Label
         {
-            BackgroundColor = Color.FromArgb("#0284C7"),
-            Stroke = AppThemeManager.Color("#38BDF8"),
-            StrokeThickness = 1,
-            StrokeShape = new RoundRectangle { CornerRadius = 6 },
-            WidthRequest = 24,
-            HeightRequest = 24,
-            VerticalOptions = LayoutOptions.Center,
-            Content = new Label
-            {
-                Text = stepNumber,
-                TextColor = Colors.White,
-                FontAttributes = FontAttributes.Bold,
-                FontSize = 12,
-                HorizontalTextAlignment = TextAlignment.Center,
-                VerticalTextAlignment = TextAlignment.Center
-            }
-        };
-
-        var titleLbl = new Label
-        {
-            Text = stepTitle,
+            Text = title,
             TextColor = AppThemeManager.Color("#F8FAFC"),
             FontAttributes = FontAttributes.Bold,
-            FontSize = 13.5,
+            FontSize = 13.5
+        });
+        titleStack.Add(new Label
+        {
+            Text = subtitle,
+            TextColor = AppThemeManager.Color("#94A3B8"),
+            FontSize = 11.5
+        });
+
+        var chevronLabel = new Label
+        {
+            Text = isExpanded ? "▾" : "▸",
+            TextColor = AppThemeManager.Color(accentColorHex),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 16,
+            HorizontalTextAlignment = TextAlignment.Center,
             VerticalTextAlignment = TextAlignment.Center
         };
 
-        headerRow.Add(badge, 0, 0);
-        headerRow.Add(titleLbl, 1, 0);
-        stack.Add(headerRow);
+        var chevronBadge = new Border
+        {
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            Stroke = AppThemeManager.Color("#334155"),
+            StrokeThickness = 1,
+            StrokeShape = new RoundRectangle { CornerRadius = 6 },
+            WidthRequest = 28,
+            HeightRequest = 28,
+            VerticalOptions = LayoutOptions.Center,
+            Content = chevronLabel
+        };
+
+        headerGrid.Add(titleStack, 0, 0);
+        headerGrid.Add(chevronBadge, 1, 0);
+
+        var bodyStack = new VerticalStackLayout
+        {
+            Spacing = 7,
+            IsVisible = isExpanded,
+            Margin = new Thickness(0, 10, 0, 2)
+        };
+
+        bodyStack.Add(new BoxView
+        {
+            HeightRequest = 1,
+            Color = AppThemeManager.Color("#334155"),
+            Margin = new Thickness(0, 0, 0, 2)
+        });
 
         foreach (string bullet in bullets)
         {
@@ -880,25 +984,81 @@ public class HelpAboutModalPage : ContentPage
             bulletGrid.Add(new Label
             {
                 Text = "•",
-                TextColor = AppThemeManager.Color("#38BDF8"),
+                TextColor = AppThemeManager.Color(accentColorHex),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = 13,
                 VerticalTextAlignment = TextAlignment.Start
             }, 0, 0);
 
-            bulletGrid.Add(new Label
-            {
-                Text = bullet,
-                TextColor = AppThemeManager.Color("#CBD5E1"),
-                FontSize = 12,
-                LineHeight = 1.2
-            }, 1, 0);
-
-            stack.Add(bulletGrid);
+            bulletGrid.Add(BuildFormattedTextLabel(bullet, 12), 1, 0);
+            bodyStack.Add(bulletGrid);
         }
 
-        border.Content = stack;
+        var tapGesture = new TapGestureRecognizer();
+        tapGesture.Tapped += (_, _) =>
+        {
+            bool nextExpanded = !bodyStack.IsVisible;
+            bodyStack.IsVisible = nextExpanded;
+            chevronLabel.Text = nextExpanded ? "▾" : "▸";
+            border.Stroke = nextExpanded ? AppThemeManager.Color(accentColorHex) : AppThemeManager.Color("#334155");
+            border.StrokeThickness = nextExpanded ? 1.5 : 1;
+
+            if (nextExpanded)
+            {
+                _expandedHelpSections.Add(sectionKey);
+            }
+            else
+            {
+                _expandedHelpSections.Remove(sectionKey);
+            }
+        };
+        headerGrid.GestureRecognizers.Add(tapGesture);
+
+        outerStack.Add(headerGrid);
+        outerStack.Add(bodyStack);
+        border.Content = outerStack;
         return border;
+    }
+
+    private static Label BuildFormattedTextLabel(string text, double fontSize)
+    {
+        int colonIdx = text.IndexOf(':');
+        if (colonIdx > 0 && colonIdx < 70)
+        {
+            string prefix = text[..(colonIdx + 1)];
+            string remainder = text[(colonIdx + 1)..].TrimStart();
+
+            var formatted = new FormattedString();
+            formatted.Spans.Add(new Span
+            {
+                Text = prefix + " ",
+                FontAttributes = FontAttributes.Bold,
+                TextColor = AppThemeManager.Color("#F8FAFC"),
+                FontSize = fontSize
+            });
+            formatted.Spans.Add(new Span
+            {
+                Text = remainder,
+                TextColor = AppThemeManager.Color("#CBD5E1"),
+                FontSize = fontSize
+            });
+
+            return new Label
+            {
+                FormattedText = formatted,
+                LineHeight = 1.18,
+                LineBreakMode = LineBreakMode.WordWrap
+            };
+        }
+
+        return new Label
+        {
+            Text = text,
+            TextColor = AppThemeManager.Color("#CBD5E1"),
+            FontSize = fontSize,
+            LineHeight = 1.18,
+            LineBreakMode = LineBreakMode.WordWrap
+        };
     }
 
     private static async Task OpenStoreRatingAsync()

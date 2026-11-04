@@ -987,6 +987,7 @@ public class MainViewModel : INotifyPropertyChanged
     {
         _storageService = storageService ?? new ProfileStorageService();
         _platformService = platformService ?? new DevicePlatformService();
+        LiveWarmupSession.Is24HourClockProvider = DevicePlatformService.IsSystem24HourClock;
 
         _storageService.Load();
         AppThemeManager.Initialize(_storageService.ThemePreference);
@@ -1641,6 +1642,14 @@ public class MainViewModel : INotifyPropertyChanged
         IsLiveTimerRunning = !IsLiveTimerRunning;
         _liveSession.IsRunning = IsLiveTimerRunning;
         ApplyLiveSnapshot(_liveSession.GetSnapshot(DateTime.Now));
+    }
+
+    public void RefreshClockFormat()
+    {
+        if (_liveSession != null)
+        {
+            ApplyLiveSnapshot(_liveSession.GetSnapshot(DateTime.Now));
+        }
     }
 
     /// <summary>

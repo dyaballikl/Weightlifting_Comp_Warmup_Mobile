@@ -11,6 +11,8 @@ public static class AppThemeManager
 {
     public static string CurrentPreference { get; private set; } = ProfileStorageService.ThemeSystem;
     public static bool IsLightTheme { get; private set; }
+    public static bool IsSystemLightTheme => ResolveSystemIsLightTheme();
+    private static bool _lastSystemLightTheme;
 
     public static event Action? ThemeChanged;
 
@@ -18,6 +20,7 @@ public static class AppThemeManager
     {
         CurrentPreference = ProfileStorageService.NormalizeThemePreference(preference);
         ApplyToApplication();
+        _lastSystemLightTheme = ResolveSystemIsLightTheme();
         IsLightTheme = ResolveIsLightTheme();
         UpdatePlatformStatusBar();
     }
@@ -53,11 +56,28 @@ public static class AppThemeManager
 
     public static void RefreshFromSystemTheme()
     {
-        var resolved = ResolveIsLightTheme();
-        if (resolved != IsLightTheme)
+        var resolvedApp = ResolveIsLightTheme();
+        var resolvedSystem = ResolveSystemIsLightTheme();
+        bool appChanged = resolvedApp != IsLightTheme;
+        bool systemChanged = resolvedSystem != _lastSystemLightTheme;
+
+        IsLightTheme = resolvedApp;
+        _lastSystemLightTheme = resolvedSystem;
+
+#if ANDROID
+        if (systemChanged)
         {
-            IsLightTheme = resolved;
+            AndroidFloatingTimerOverlay.Shared.RefreshSystemTheme();
+        }
+#endif
+
+        if (appChanged)
+        {
             UpdatePlatformStatusBar();
+            ThemeChanged?.Invoke();
+        }
+        else if (systemChanged)
+        {
             ThemeChanged?.Invoke();
         }
     }
@@ -81,18 +101,48 @@ public static class AppThemeManager
         if (CurrentPreference == ProfileStorageService.ThemeDark)
             return false;
 
+        return ResolveSystemIsLightTheme();
+    }
+
+    /// <summary>
+    /// Resolves whether the device OS/system theme is currently set to Light mode,
+    /// independent of the user's in-app theme preference.
+    /// </summary>
+    public static bool ResolveSystemIsLightTheme()
+    {
 #if ANDROID
         try
         {
-            var uiMode = Android.App.Application.Context?.Resources?.Configuration?.UiMode;
-            if (uiMode.HasValue)
+            var appUiMode = Android.App.Application.Context?.Resources?.Configuration?.UiMode;
+            if (appUiMode.HasValue)
             {
-                var nightMask = uiMode.Value & Android.Content.Res.UiMode.NightMask;
+                var nightMask = appUiMode.Value & Android.Content.Res.UiMode.NightMask;
                 if (nightMask == Android.Content.Res.UiMode.NightNo)
                     return true;
                 if (nightMask == Android.Content.Res.UiMode.NightYes)
                     return false;
             }
+
+            if (Android.App.Application.Context?.GetSystemService(Android.Content.Context.UiModeService) is Android.App.UiModeManager uiModeManager)
+            {
+                if (uiModeManager.NightMode == Android.App.UiNightMode.No)
+                    return true;
+                if (uiModeManager.NightMode == Android.App.UiNightMode.Yes)
+                    return false;
+            }
+        }
+        catch
+        {
+            // Ignore and fall back to MAUI PlatformAppTheme
+        }
+#elif IOS
+        try
+        {
+            var style = UIKit.UIScreen.MainScreen.TraitCollection.UserInterfaceStyle;
+            if (style == UIKit.UIUserInterfaceStyle.Light)
+                return true;
+            if (style == UIKit.UIUserInterfaceStyle.Dark)
+                return false;
         }
         catch
         {
@@ -174,11 +224,19 @@ public static class AppThemeManager
         IsLightTheme ? Microsoft.Maui.Graphics.Color.FromArgb("#F1F5F9") : Microsoft.Maui.Graphics.Color.FromArgb("#0F172A");
 
     /// <summary>
-    /// Maps a dark-mode hex color token to its semantic equivalent in the currently active theme.
+    /// Maps a dark-mode hex color token to its semantic equivalent in the currently active in-app theme.
     /// </summary>
-    public static Color Color(string darkHex)
+    public static Color Color(string darkHex) => MapColor(darkHex, IsLightTheme);
+
+    /// <summary>
+    /// Maps a dark-mode hex color token to its semantic equivalent in the device's OS/system theme,
+    /// independent of the user's in-app theme override (used by the PiP / floating mini-timer).
+    /// </summary>
+    public static Color SystemColor(string darkHex) => MapColor(darkHex, IsSystemLightTheme);
+
+    private static Color MapColor(string darkHex, bool isLight)
     {
-        if (!IsLightTheme)
+        if (!isLight)
             return Microsoft.Maui.Graphics.Color.FromArgb(darkHex);
 
         var mapped = darkHex.ToUpperInvariant() switch

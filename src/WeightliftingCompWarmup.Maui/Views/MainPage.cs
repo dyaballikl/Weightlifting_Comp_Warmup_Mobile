@@ -33,6 +33,12 @@ public class MainPage : ContentPage
     private readonly Grid _rootGrid;
     private readonly Grid _promptOverlayHost;
     private readonly View _pipOverlayHost;
+    private Border? _pipOverlayBorder;
+    private Label? _pipCompStatusLabel;
+    private BoxView? _pipDivider;
+    private Label? _pipStepLabel;
+    private Label? _pipRemainingLabel;
+    private ProgressBar? _pipProgressBar;
     private TaskCompletionSource<string?>? _activePromptTcs;
     private readonly ContentView _headerContainer;
     private readonly ContentView _bannerContainer;
@@ -48,6 +54,7 @@ public class MainPage : ContentPage
     private Button? _cjHeaderBtn;
     private Button? _setupHeaderBtn;
     private Button? _liveHeaderBtn;
+    private TimePicker? _competitionStartTimePicker;
 
     public MainPage(MainViewModel viewModel)
     {
@@ -124,6 +131,7 @@ public class MainPage : ContentPage
         {
             BackgroundColor = AppThemeManager.Color("#0B1120");
             _promptOverlayHost.BackgroundColor = AppThemeManager.Color("#B3020617");
+            RefreshPipMiniTimerOverlayTheme();
             _headerContainer.Content = BuildTopNavigationHeader();
             _bannerContainer.Content = BuildBannersStack();
             if (_layoutInitialized)
@@ -148,18 +156,18 @@ public class MainPage : ContentPage
 
     private View BuildPipMiniTimerOverlay()
     {
-        var compStatusLabel = new Label
+        _pipCompStatusLabel = new Label
         {
             FontSize = 10,
             FontAttributes = FontAttributes.Bold,
             FontAutoScalingEnabled = false,
-            TextColor = Color.FromArgb("#38BDF8"),
+            TextColor = AppThemeManager.SystemColor("#38BDF8"),
             HorizontalTextAlignment = TextAlignment.Start,
             VerticalTextAlignment = TextAlignment.Center,
             LineBreakMode = LineBreakMode.TailTruncation,
             MaxLines = 1
         };
-        compStatusLabel.SetBinding(Label.TextProperty, nameof(MainViewModel.LiveMiniCompStatusText));
+        _pipCompStatusLabel.SetBinding(Label.TextProperty, nameof(MainViewModel.LiveMiniCompStatusText));
 
         var advanceBtn = new Button
         {
@@ -187,49 +195,49 @@ public class MainPage : ContentPage
             ColumnSpacing = 4,
             Padding = new Thickness(6, 2, 6, 1)
         };
-        topRow.Add(compStatusLabel, 0, 0);
+        topRow.Add(_pipCompStatusLabel, 0, 0);
         topRow.Add(advanceBtn, 1, 0);
 
-        var divider = new BoxView
+        _pipDivider = new BoxView
         {
-            Color = Color.FromArgb("#334155"),
+            Color = AppThemeManager.SystemColor("#334155"),
             HeightRequest = 1,
             Margin = new Thickness(6, 0)
         };
 
-        var stepLabel = new Label
+        _pipStepLabel = new Label
         {
             FontSize = 11,
             FontAttributes = FontAttributes.Bold,
             FontAutoScalingEnabled = false,
-            TextColor = Color.FromArgb("#F8FAFC"),
+            TextColor = AppThemeManager.SystemColor("#F8FAFC"),
             HorizontalTextAlignment = TextAlignment.Center,
             LineBreakMode = LineBreakMode.TailTruncation,
             MaxLines = 1
         };
-        stepLabel.SetBinding(Label.TextProperty, nameof(MainViewModel.LiveActiveStepDescription));
+        _pipStepLabel.SetBinding(Label.TextProperty, nameof(MainViewModel.LiveActiveStepDescription));
 
-        var remainingLabel = new Label
+        _pipRemainingLabel = new Label
         {
             FontSize = 18,
             FontAttributes = FontAttributes.Bold,
             FontAutoScalingEnabled = false,
-            TextColor = Color.FromArgb("#FACC15"),
+            TextColor = AppThemeManager.SystemColor("#FACC15"),
             HorizontalTextAlignment = TextAlignment.Center,
             LineBreakMode = LineBreakMode.NoWrap,
             MaxLines = 1
         };
-        remainingLabel.SetBinding(Label.TextProperty, nameof(MainViewModel.LiveActiveStepRemaining));
+        _pipRemainingLabel.SetBinding(Label.TextProperty, nameof(MainViewModel.LiveActiveStepRemaining));
 
-        var progressBar = new ProgressBar
+        _pipProgressBar = new ProgressBar
         {
             ProgressColor = Color.FromArgb("#16A34A"),
-            BackgroundColor = Color.FromArgb("#1E293B"),
+            BackgroundColor = AppThemeManager.SystemColor("#334155"),
             HeightRequest = 3,
             Margin = new Thickness(10, 0, 10, 2),
             VerticalOptions = LayoutOptions.End
         };
-        progressBar.SetBinding(ProgressBar.ProgressProperty, nameof(MainViewModel.LiveActiveStepProgress));
+        _pipProgressBar.SetBinding(ProgressBar.ProgressProperty, nameof(MainViewModel.LiveActiveStepProgress));
 
         var contentGrid = new Grid
         {
@@ -243,7 +251,7 @@ public class MainPage : ContentPage
         };
 
         contentGrid.Add(topRow, 0, 0);
-        contentGrid.Add(divider, 0, 1);
+        contentGrid.Add(_pipDivider, 0, 1);
         contentGrid.Add(new VerticalStackLayout
         {
             Padding = new Thickness(6, 1),
@@ -252,22 +260,54 @@ public class MainPage : ContentPage
             HorizontalOptions = LayoutOptions.Fill,
             Children =
             {
-                stepLabel,
-                remainingLabel
+                _pipStepLabel,
+                _pipRemainingLabel
             }
         }, 0, 2);
 
-        contentGrid.Add(progressBar, 0, 3);
+        contentGrid.Add(_pipProgressBar, 0, 3);
 
-        return new Border
+        _pipOverlayBorder = new Border
         {
             IsVisible = false,
             ZIndex = 200,
-            BackgroundColor = Color.FromArgb("#0F172A"),
+            BackgroundColor = AppThemeManager.SystemColor("#1E293B"),
             StrokeThickness = 0,
             Padding = 0,
             Content = contentGrid
         };
+
+        RefreshPipMiniTimerOverlayTheme();
+        return _pipOverlayBorder;
+    }
+
+    private void RefreshPipMiniTimerOverlayTheme()
+    {
+        bool isSystemLight = AppThemeManager.IsSystemLightTheme;
+        if (_pipOverlayBorder != null)
+        {
+            _pipOverlayBorder.BackgroundColor = Color.FromArgb(isSystemLight ? "#FFFFFF" : "#0F172A");
+        }
+        if (_pipCompStatusLabel != null)
+        {
+            _pipCompStatusLabel.TextColor = AppThemeManager.SystemColor("#38BDF8");
+        }
+        if (_pipDivider != null)
+        {
+            _pipDivider.Color = AppThemeManager.SystemColor("#334155");
+        }
+        if (_pipStepLabel != null)
+        {
+            _pipStepLabel.TextColor = AppThemeManager.SystemColor("#F8FAFC");
+        }
+        if (_pipRemainingLabel != null)
+        {
+            _pipRemainingLabel.TextColor = AppThemeManager.SystemColor("#FACC15");
+        }
+        if (_pipProgressBar != null)
+        {
+            _pipProgressBar.BackgroundColor = AppThemeManager.SystemColor("#334155");
+        }
     }
 
     private void OnPipModeChanged(bool isInPip)
@@ -276,6 +316,7 @@ public class MainPage : ContentPage
 #if ANDROID
         if (isInPip)
         {
+            RefreshPipMiniTimerOverlayTheme();
             if (_promptOverlayHost.IsVisible && _activePromptTcs != null)
             {
                 CloseInputPrompt(null);
@@ -387,11 +428,26 @@ public class MainPage : ContentPage
 
     public void CheckForAppUpdate()
     {
+        RefreshSystemClockFormat();
         if (!_isInPipMode)
         {
             _ = _vm.CheckForUpdateOnOpenAsync(HelpAboutModalPage.AppVersion);
         }
     }
+
+    public void RefreshSystemClockFormat()
+    {
+        System.Globalization.CultureInfo.CurrentCulture.ClearCachedData();
+        string desiredFormat = GetSystemTimePickerFormat();
+        if (_competitionStartTimePicker != null && _competitionStartTimePicker.Format != desiredFormat)
+        {
+            _competitionStartTimePicker.Format = desiredFormat;
+        }
+        _vm.RefreshClockFormat();
+    }
+
+    private static string GetSystemTimePickerFormat() =>
+        DevicePlatformService.IsSystem24HourClock() ? "HH:mm" : "h:mm tt";
 
     protected override void OnDisappearing()
     {
@@ -1241,6 +1297,7 @@ public class MainPage : ContentPage
         {
             var timePicker = new TimePicker
             {
+                Format = GetSystemTimePickerFormat(),
                 TextColor = AppThemeManager.Color("#F8FAFC"),
                 BackgroundColor = AppThemeManager.EntryBackground,
                 FontAttributes = FontAttributes.Bold,
@@ -1249,6 +1306,7 @@ public class MainPage : ContentPage
                 VerticalOptions = LayoutOptions.Center
             };
             timePicker.SetBinding(TimePicker.TimeProperty, nameof(MainViewModel.CompetitionStartTime), BindingMode.TwoWay);
+            _competitionStartTimePicker = timePicker;
 
             if (compact)
             {

@@ -1,3 +1,4 @@
+using System.Globalization;
 using WeightliftingCompWarmup.Core.Models;
 
 namespace WeightliftingCompWarmup.Core.Services;
@@ -74,6 +75,30 @@ public record LiveSessionSnapshot(
 /// </summary>
 public class LiveWarmupSession
 {
+    /// <summary>
+    /// Optional platform-specific delegate returning <c>true</c> when the user's device is configured for 24-hour time,
+    /// or <c>false</c> for 12-hour (AM/PM) time. Falls back to <see cref="CultureInfo.CurrentCulture"/> when unset.
+    /// </summary>
+    public static Func<bool>? Is24HourClockProvider { get; set; }
+
+    public static bool Is24HourClock()
+    {
+        if (Is24HourClockProvider != null)
+        {
+            return Is24HourClockProvider();
+        }
+
+        var dtf = CultureInfo.CurrentCulture.DateTimeFormat;
+        return dtf.LongTimePattern.Contains('H') || dtf.ShortTimePattern.Contains('H');
+    }
+
+    public static string FormatClockTime(DateTime time)
+    {
+        return Is24HourClock()
+            ? time.ToString("HH:mm:ss", CultureInfo.InvariantCulture)
+            : time.ToString("hh:mm:ss tt", CultureInfo.InvariantCulture);
+    }
+
     private readonly Profile _profile;
     private readonly List<WarmupStep> _steps;
     private int _previousActiveStepOrder = -1;
@@ -654,8 +679,8 @@ public class LiveWarmupSession
             LiftType: LiftType,
             IsRunning: IsRunning,
             AutoAdvance: AutoAdvance,
-            CurrentTimeDisplay: now.ToString("hh:mm:ss tt"),
-            OpenTimeDisplay: now.AddSeconds(secondsToOpen).ToString("hh:mm:ss tt"),
+            CurrentTimeDisplay: FormatClockTime(now),
+            OpenTimeDisplay: FormatClockTime(now.AddSeconds(secondsToOpen)),
             TimeToOpenDisplay: WarmupCalculator.FormatSeconds(secondsToOpen),
             SecondsToOpen: secondsToOpen,
             TimeTillStartDisplay: timeTillStartDisplay,
