@@ -12,7 +12,11 @@ using WeightliftingCompWarmup.Maui.Services;
 namespace WeightliftingCompWarmup.Maui;
 
 [Activity(
+#if SIDELOAD_APK
+    Label = "Comp OWL (Dev)",
+#else
     Label = "Comp OWL",
+#endif
     Theme = "@style/Maui.SplashTheme",
     MainLauncher = true,
     LaunchMode = LaunchMode.SingleTop,

@@ -73,6 +73,8 @@ public class MainViewModel : INotifyPropertyChanged
     private string _updateAvailableVersion = string.Empty;
     private bool _isUpdateBannerDismissed;
     private bool _isCheckingForUpdate;
+    private int _pendingScannedSnatchLiftsPassed;
+    private int _pendingScannedCjLiftsPassed;
 
     private ObservableCollection<SetupStepItemViewModel> _previewSteps = new();
     private ObservableCollection<ExtraItem> _extrasList = new();
@@ -1101,7 +1103,18 @@ public class MainViewModel : INotifyPropertyChanged
         DeleteWarmupTimeCommand = new Command<WarmupTimeRule>(ExecuteDeleteWarmupTime);
 
         ToggleLiveTimerCommand = new Command(ExecuteToggleLiveTimer);
-        ResetLiveSessionCommand = new Command(() => InitializeLiveSession(autoStart: IsLiveTimerRunning));
+        ResetLiveSessionCommand = new Command(() =>
+        {
+            if (_selectedLiftType == LiftType.Snatch)
+            {
+                _pendingScannedSnatchLiftsPassed = 0;
+            }
+            else
+            {
+                _pendingScannedCjLiftsPassed = 0;
+            }
+            InitializeLiveSession(autoStart: IsLiveTimerRunning);
+        });
         AdvanceStageLiftCommand = new Command(ExecuteAdvanceStageLift);
         AdvanceCjSnatchLiftCommand = new Command(ExecuteAdvanceCjSnatchLift);
         AdvanceActiveLivePhaseCommand = new Command(ExecuteAdvanceActiveLivePhase);
@@ -1593,6 +1606,19 @@ public class MainViewModel : INotifyPropertyChanged
             AutoAdvance = _liveAutoAdvance
         };
 
+        int pendingPassed = _selectedLiftType == LiftType.Snatch
+            ? _pendingScannedSnatchLiftsPassed
+            : _pendingScannedCjLiftsPassed;
+        if (pendingPassed > 0)
+        {
+            int? remSnatch = _selectedLiftType == LiftType.CleanAndJerk ? ActiveProfile.CjSnatchLiftsOut : null;
+            _liveSession.ApplyScoreboardScan(
+                _selectedLiftType == LiftType.Snatch ? ActiveProfile.SnatchLiftsOut : ActiveProfile.CjLiftsOut,
+                pendingPassed,
+                remSnatch,
+                DateTime.Now);
+        }
+
         _isCjSnatchManuallyExpanded = false;
         _isCjBreakManuallyExpanded = false;
 
@@ -1601,6 +1627,12 @@ public class MainViewModel : INotifyPropertyChanged
         _platformService.SetLiveMiniTimerEnabled(autoStart && _isLiveMode);
 
         var snapshot = _liveSession.GetSnapshot(DateTime.Now);
+        RebuildLiveStepItemsFromSnapshot(snapshot);
+        ApplyLiveSnapshot(snapshot);
+    }
+
+    private void RebuildLiveStepItemsFromSnapshot(LiveSessionSnapshot snapshot)
+    {
         var nextLiveSteps = new ObservableCollection<LiveStepItemViewModel>();
         foreach (var step in snapshot.Steps)
         {
@@ -1617,7 +1649,190 @@ public class MainViewModel : INotifyPropertyChanged
         }
 
         LiveSteps = nextLiveSteps;
-        ApplyLiveSnapshot(snapshot);
+    }
+
+    public int GetOpenerWeightForDiscipline(LiftType discipline)
+        => discipline == LiftType.Snatch ? ActiveProfile.SnatchOpenerWeight : ActiveProfile.CjOpenerWeight;
+
+    /// <summary>
+    /// Updates the user's 1st attempt Opener Weight for the specified <paramref name="discipline"/>
+    /// directly in the active profile/main Setup settings and carries the change through to the active Live session.
+    /// </summary>
+    public void SetOpenerWeightForDiscipline(
+        LiftType discipline,
+        int newOpenerWeightKg,
+        int? updatedLiftsOut = null)
+    {
+        int clampedOpener = Math.Clamp(newOpenerWeightKg, ActiveProfile.BarbellWeight, Defaults.MaxOpenerWeight);
+        if (discipline == LiftType.Snatch)
+        {
+            ActiveProfile.SnatchOpenerWeight = clampedOpener;
+            if (updatedLiftsOut.HasValue)
+            {
+                ActiveProfile.SnatchLiftsOut = Math.Clamp(updatedLiftsOut.Value, 0, 99);
+            }
+        }
+        else
+        {
+            ActiveProfile.CjOpenerWeight = clampedOpener;
+            if (updatedLiftsOut.HasValue)
+            {
+                ActiveProfile.CjLiftsOut = Math.Clamp(updatedLiftsOut.Value, 0, 99);
+            }
+        }
+
+        _storageService.Save();
+
+        if (_selectedLiftType == discipline)
+        {
+            OnPropertyChanged(nameof(OpenerWeight));
+            if (updatedLiftsOut.HasValue)
+            {
+                OnPropertyChanged(nameof(SetupLiftsOut));
+            }
+            RefreshSetupCalculations();
+        }
+
+        if (_liveSession != null && _liveSession.LiftType == discipline)
+        {
+            var snapshot = _liveSession.UpdateOpenerWeight(clampedOpener, DateTime.Now);
+            if (updatedLiftsOut.HasValue)
+            {
+                snapshot = _liveSession.SetLiftsOut(updatedLiftsOut.Value, DateTime.Now);
+            }
+            RebuildLiveStepItemsFromSnapshot(snapshot);
+            ApplyLiveSnapshot(snapshot);
+        }
+    }
+
+    public int GetLiftsOutForDiscipline(LiftType discipline)
+    {
+        if (_isLiveMode && _liveSession != null && _selectedLiftType == discipline)
+        {
+            return _liveSession.LiftsOut;
+        }
+
+        return discipline == LiftType.Snatch ? ActiveProfile.SnatchLiftsOut : ActiveProfile.CjLiftsOut;
+    }
+
+    /// <summary>
+    /// Applies the calculated Lifts Out (or leaves it as-is when <paramref name="liftsOut"/> is <c>null</c>),
+    /// Lifts Passed, optional Remaining Snatch Lifts, and optional updated Opener Weight from the AI Scoreboard Scanner
+    /// for the specified <paramref name="targetDiscipline"/> independently of the other discipline.
+    /// </summary>
+    public void ApplyScoreboardScanResult(
+        int? liftsOut,
+        int liftsPassed,
+        int? remainingSnatchLifts = null,
+        int? updatedOpenerWeightKg = null,
+        LiftType? targetDiscipline = null,
+        bool switchActiveDiscipline = false)
+    {
+        LiftType discipline = targetDiscipline ?? _selectedLiftType;
+
+        if (switchActiveDiscipline && discipline != _selectedLiftType)
+        {
+            SelectedLiftType = discipline;
+        }
+
+        bool openerChanged = false;
+        int clampedOpener = GetOpenerWeightForDiscipline(discipline);
+        if (updatedOpenerWeightKg.HasValue && updatedOpenerWeightKg.Value >= ActiveProfile.BarbellWeight)
+        {
+            clampedOpener = Math.Clamp(updatedOpenerWeightKg.Value, ActiveProfile.BarbellWeight, Defaults.MaxOpenerWeight);
+            if (discipline == LiftType.Snatch)
+            {
+                if (ActiveProfile.SnatchOpenerWeight != clampedOpener)
+                {
+                    ActiveProfile.SnatchOpenerWeight = clampedOpener;
+                    openerChanged = true;
+                }
+            }
+            else
+            {
+                if (ActiveProfile.CjOpenerWeight != clampedOpener)
+                {
+                    ActiveProfile.CjOpenerWeight = clampedOpener;
+                    openerChanged = true;
+                }
+            }
+        }
+
+        if (liftsOut.HasValue)
+        {
+            int clampedLiftsOut = Math.Clamp(liftsOut.Value, 0, 99);
+            if (discipline == LiftType.Snatch)
+            {
+                ActiveProfile.SnatchLiftsOut = clampedLiftsOut;
+            }
+            else
+            {
+                ActiveProfile.CjLiftsOut = clampedLiftsOut;
+            }
+        }
+
+        if (discipline == LiftType.Snatch)
+        {
+            _pendingScannedSnatchLiftsPassed = Math.Clamp(liftsPassed, 0, 999);
+        }
+        else
+        {
+            _pendingScannedCjLiftsPassed = Math.Clamp(liftsPassed, 0, 999);
+            if (remainingSnatchLifts.HasValue)
+            {
+                ActiveProfile.CjSnatchLiftsOut = Math.Clamp(remainingSnatchLifts.Value, 0, 99);
+                OnPropertyChanged(nameof(CjSnatchAttemptsRemaining));
+            }
+        }
+
+        _storageService.Save();
+
+        if (_selectedLiftType == discipline)
+        {
+            OnPropertyChanged(nameof(OpenerWeight));
+            OnPropertyChanged(nameof(SetupLiftsOut));
+            RefreshSetupCalculations();
+
+            if (_isLiveMode)
+            {
+                if (_liveSession == null)
+                {
+                    InitializeLiveSession(autoStart: IsLiveTimerRunning);
+                }
+                else
+                {
+                    if (openerChanged)
+                    {
+                        _liveSession.UpdateOpenerWeight(clampedOpener, DateTime.Now);
+                    }
+
+                    var snapshot = _liveSession.ApplyScoreboardScan(
+                        liftsOut,
+                        liftsPassed,
+                        remainingSnatchLifts,
+                        DateTime.Now);
+                    if (openerChanged)
+                    {
+                        RebuildLiveStepItemsFromSnapshot(snapshot);
+                    }
+                    ApplyLiveSnapshot(snapshot);
+                }
+            }
+        }
+
+        int effectiveLiftsOut = GetLiftsOutForDiscipline(discipline);
+        string disciplineLabel = discipline == LiftType.Snatch ? "Snatch" : "Clean & Jerk";
+        string snatchSuffix = (discipline == LiftType.CleanAndJerk && remainingSnatchLifts.HasValue && remainingSnatchLifts.Value > 0)
+            ? $", {remainingSnatchLifts.Value} Snatch left"
+            : string.Empty;
+        if (liftsOut.HasValue)
+        {
+            ShowBanner($"Applied {disciplineLabel} board scan: {effectiveLiftsOut} lifts out, {Math.Max(0, liftsPassed)} lifts passed{snatchSuffix}.");
+        }
+        else
+        {
+            ShowBanner($"Applied {disciplineLabel} board scan: Lifts Out kept as-is ({effectiveLiftsOut}), {Math.Max(0, liftsPassed)} lifts passed{snatchSuffix}.");
+        }
     }
 
     public void StopLiveTimer()

@@ -119,20 +119,31 @@ if ($HasKeystore) {
 }
 
 if (-not $PlayStoreBundleOnly) {
-    Write-Host "=== 1. Packaging Android Release APK (v$DisplayVersion) ===" -ForegroundColor Cyan
+    $SideloadAppId = "com.weightlifting.compwarmup.dev"
+    $SideloadAppTitle = "Comp OWL (Dev)"
+    Write-Host "=== 1. Packaging Android Release APK (v$DisplayVersion | $SideloadAppTitle [$SideloadAppId]) ===" -ForegroundColor Cyan
     if ($HasKeystore) {
         dotnet publish $MauiProject -f net10.0-android -c Release `
             -p:AndroidPackageFormat=apk `
+            -p:ApplicationId="$SideloadAppId" `
+            -p:ApplicationTitle="$SideloadAppTitle" `
+            -p:UseDevIcon=true `
+            -p:DefineConstants="SIDELOAD_APK" `
             -p:AndroidKeyStore=true `
             -p:AndroidSigningKeyStore="$KeystorePath" `
             -p:AndroidSigningKeyAlias="$KeyAlias" `
             -p:AndroidSigningKeyPass="$KeyPass" `
             -p:AndroidSigningStorePass="$KeyPass"
     } else {
-        dotnet publish $MauiProject -f net10.0-android -c Release -p:AndroidPackageFormat=apk
+        dotnet publish $MauiProject -f net10.0-android -c Release `
+            -p:AndroidPackageFormat=apk `
+            -p:ApplicationId="$SideloadAppId" `
+            -p:ApplicationTitle="$SideloadAppTitle" `
+            -p:UseDevIcon=true `
+            -p:DefineConstants="SIDELOAD_APK"
     }
 
-    $SignedApk = Join-Path $ProjectRoot "src\WeightliftingCompWarmup.Maui\bin\Release\net10.0-android\publish\com.weightlifting.compwarmup-Signed.apk"
+    $SignedApk = Join-Path $ProjectRoot "src\WeightliftingCompWarmup.Maui\bin\Release\net10.0-android\publish\$SideloadAppId-Signed.apk"
     if (Test-Path $SignedApk) {
         Get-ChildItem -Path $AndroidOutDir -Filter "WeightliftingCompWarmup-*-Signed.apk" -ErrorAction SilentlyContinue | Remove-Item -Force
         $DestApk = Join-Path $AndroidOutDir "WeightliftingCompWarmup-$DisplayVersion-Signed.apk"
@@ -145,8 +156,17 @@ if ($HasKeystore) {
     Write-Host ""
     Write-Host "=== Packaging Google Play Store Release AAB (v$DisplayVersion, build $VersionCode) ===" -ForegroundColor Cyan
 
+    # Clear cached Resizetizer/flat resources so the Play Store AAB uses the production dark-blue icon
+    foreach ($subDir in @("resizetizer", "flat", "flata", "res")) {
+        $targetDir = Join-Path $AndroidObjDir $subDir
+        if (Test-Path $targetDir) {
+            Remove-Item -Path $targetDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
     dotnet publish $MauiProject -f net10.0-android -c Release `
         -p:AndroidPackageFormat=aab `
+        -p:UseDevIcon=false `
         -p:AndroidKeyStore=true `
         -p:AndroidSigningKeyStore="$KeystorePath" `
         -p:AndroidSigningKeyAlias="$KeyAlias" `

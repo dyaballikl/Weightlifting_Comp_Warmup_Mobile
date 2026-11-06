@@ -37,5 +37,9 @@
     <array>
         <string>audio</string>
     </array>
+    <key>NSCameraUsageDescription</key>
+    <string>Comp OWL uses the camera so you can take a photo of the competition scoreboard to calculate Lifts Out and Lifts Passed.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Comp OWL accesses your selected photo so you can analyze a competition scoreboard image to calculate Lifts Out and Lifts Passed.</string>
 </dict>
 </plist>

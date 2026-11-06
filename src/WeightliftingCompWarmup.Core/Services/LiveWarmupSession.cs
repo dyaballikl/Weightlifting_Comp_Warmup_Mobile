@@ -217,6 +217,28 @@ public class LiveWarmupSession
     }
 
     /// <summary>
+    /// Updates the opener weight for this live session in-place, rebuilding the warmup step progression
+    /// while preserving all live clock, break, and stage-lift progress state.
+    /// </summary>
+    public LiveSessionSnapshot UpdateOpenerWeight(int newOpenerWeightKg, DateTime? now = null)
+    {
+        int clamped = Math.Clamp(newOpenerWeightKg, _profile.BarbellWeight, Defaults.MaxOpenerWeight);
+        if (LiftType == LiftType.Snatch)
+        {
+            _profile.SnatchOpenerWeight = clamped;
+        }
+        else
+        {
+            _profile.CjOpenerWeight = clamped;
+        }
+
+        _steps.Clear();
+        _steps.AddRange(WarmupCalculator.BuildLiveSteps(LiftType, _profile));
+
+        return CreateSnapshot(now ?? DateTime.Now, advanceClocks: false);
+    }
+
+    /// <summary>
     /// Adjusts <see cref="LiftsOut"/> directly (via +/- buttons or numeric entry).
     /// </summary>
     public LiveSessionSnapshot SetLiftsOut(int liftsOut, DateTime? now = null)
@@ -229,6 +251,87 @@ public class LiveWarmupSession
         else if (StageLiftElapsed >= StageLiftMaximum)
         {
             StageLiftElapsed = 0;
+        }
+
+        return CreateSnapshot(now ?? DateTime.Now, advanceClocks: false);
+    }
+
+    /// <summary>
+    /// Applies a scoreboard scan result (optional <see cref="LiftsOut"/>, <see cref="LiftsPassed"/>, and optional
+    /// remaining Snatch attempts for Clean &amp; Jerk) directly to the live session state.
+    /// When <paramref name="liftsOut"/> is <c>null</c> (e.g. when a heavier weight than the user's app opener has already been lifted on stage),
+    /// <see cref="LiftsOut"/> is left unchanged as-is.
+    /// When <paramref name="liftsPassed"/> &gt; 0 for the current discipline, pre-stage clocks/breaks are
+    /// automatically marked complete because platform lifting is already underway.
+    /// </summary>
+    public LiveSessionSnapshot ApplyScoreboardScan(
+        int? liftsOut,
+        int liftsPassed,
+        int? remainingSnatchLifts = null,
+        DateTime? now = null)
+    {
+        if (liftsOut.HasValue)
+        {
+            LiftsOut = Math.Clamp(liftsOut.Value, 0, 99);
+        }
+
+        LiftsPassed = Math.Clamp(liftsPassed, 0, 999);
+
+        if (LiftType == LiftType.Snatch)
+        {
+            if (LiftsPassed > 0)
+            {
+                _forceCompetitionStarted = true;
+                CjBreakElapsed = CjBreakMaximum;
+                StageLiftElapsed = 0;
+            }
+
+            if (LiftsOut == 0)
+            {
+                StageLiftElapsed = StageLiftMaximum;
+            }
+            else if (StageLiftElapsed >= StageLiftMaximum)
+            {
+                StageLiftElapsed = 0;
+            }
+        }
+        else
+        {
+            if (remainingSnatchLifts.HasValue)
+            {
+                CjSnatchLiftsOut = Math.Clamp(remainingSnatchLifts.Value, 0, 99);
+            }
+
+            if (LiftsPassed > 0)
+            {
+                // Clean & Jerk platform attempts have already started
+                CjSnatchLiftsOut = 0;
+                CjSnatchStageElapsed = CjSnatchStageMaximum;
+                CjBreakElapsed = CjBreakMaximum;
+                StageLiftElapsed = 0;
+            }
+            else if (remainingSnatchLifts.HasValue)
+            {
+                if (CjSnatchLiftsOut > 0)
+                {
+                    CjSnatchStageElapsed = 0;
+                    CjBreakElapsed = 0;
+                    StageLiftElapsed = 0;
+                }
+                else
+                {
+                    CjSnatchStageElapsed = CjSnatchStageMaximum;
+                }
+            }
+
+            if (LiftsOut == 0)
+            {
+                StageLiftElapsed = StageLiftMaximum;
+            }
+            else if (StageLiftElapsed >= StageLiftMaximum)
+            {
+                StageLiftElapsed = 0;
+            }
         }
 
         return CreateSnapshot(now ?? DateTime.Now, advanceClocks: false);

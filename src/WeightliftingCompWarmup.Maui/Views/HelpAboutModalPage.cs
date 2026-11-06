@@ -29,8 +29,8 @@ public class HelpAboutModalPage : ContentPage
 
     public const string AppShortName = "Comp OWL";
     public const string AppFullName = "Weightlifting Comp Warmup";
-    public const string AppVersion = "2.0.31";
-    public const string AppBuild = "33";
+    public const string AppVersion = "2.0.45";
+    public const string AppBuild = "47";
     public const string AppleAppStoreId = ""; // Populate with numeric App Store Connect ID once created
 
     public HelpAboutModalPage(bool startOnAboutTab = false, Action<string>? onSelectTheme = null)
@@ -319,6 +319,20 @@ public class HelpAboutModalPage : ContentPage
         });
 
         // 3. Expandable Accordion Cards
+        stack.Add(CreateExpandableSectionCard(
+            sectionKey: "scanner",
+            title: "📷 AI Scoreboard Scanner (Beta) — Lifts Out & Passed",
+            subtitle: "Photo scoreboard analysis, IWF calling-order rules, S-curve jumps & Show Your Work",
+            accentColorHex: "#38BDF8",
+            bullets: new[]
+            {
+                "Snap or Pick a Scoreboard Photo: Tap '📷 Scan Scoreboard (Beta)' in Setup or '📷 Scan (Beta)' in Live mode to photograph the warmup room monitor or pick a photo from your gallery.",
+                "Private On-Device Gemini API Key: Uses your own free Google AI Studio (Gemini Flash) API key. Your key is stored strictly on your device only (gemini_api_key.txt) and is never included in profile backups.",
+                "Exact IWF Calling-Order Rules: Calculates Lifts Out to your Opener using official rising-bar priority: (1) Lowest Weight → (2) Earlier Attempt # (1st attempt beats 2nd/3rd at the same weight regardless of Lot #) → (3) Earlier Previous Attempt Sequence (replayed retroactively from Lift #1) → (4) Lower Lot/Seed # for 1st-attempt ties.",
+                "S-Curve Next-Attempt Projections: Undeclared 2nd & 3rd attempts are projected in whole kilograms using a logistic S-curve (+1kg around 20kg, +2kg around 40kg, +3kg around 65kg, +4kg around 90kg, capped at +5kg at 105kg+, with a slight step-down on 3rd attempts when the 1st jump > 3kg, and +0kg repeat after a miss).",
+                "Show Your Work, Row Exclusion & Overrides: Inspect every athlete's expected lifts and chronological call order, exclude prior-session lifter rows ('🚫 Exclude'), tap any cell to override a weight or status, or tap '✉️ Report Analysis Error' at the bottom to email a diagnostic report."
+            }));
+
         stack.Add(CreateExpandableSectionCard(
             sectionKey: "tips",
             title: "💡 Competition Tips & Common Scenarios",

@@ -27,7 +27,8 @@ Your privacy is important to us. **Comp OWL does not collect, transmit, rent, se
 
 ## 3. Device Permissions and Network Access
 
-- **Offline Operation:** Comp OWL functions completely offline and does not make background network requests.
+- **Offline Operation:** All core warmup calculation, plate loading, and live countdown timer features function completely offline.
+- **Optional Camera & Scoreboard Scanner (Beta):** Comp OWL requests Camera / Photo Library permission solely when you choose to use the optional **AI Scoreboard Scanner (Beta)** to take or select a photo of a competition scoreboard. When you initiate a scan, the selected scoreboard photo is sent directly from your device to Google's Gemini API (`generativelanguage.googleapis.com`) using your own user-supplied Google AI Studio API key stored locally on your device (`gemini_api_key.txt`). Comp OWL does not operate any intermediary servers and never receives or stores your photos or API key.
 - **External Links:** The "About" screen contains optional links to the project's public GitHub repositories, the developer's Instagram profile, and an optional Ko-fi support page (`ko-fi.com/compowlapp`). Tapping these links opens your device's default web browser or app, which is governed by the respective third-party platform's privacy policy.
 
 ---

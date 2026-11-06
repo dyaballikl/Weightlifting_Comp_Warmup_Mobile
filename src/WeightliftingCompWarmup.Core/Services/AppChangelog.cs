@@ -27,6 +27,16 @@ public static class AppChangelog
     private static readonly IReadOnlyList<AppReleaseNote> AllReleases =
     [
         new AppReleaseNote(
+            Version: "2.0.45",
+            Title: "AI Scoreboard Scanner (Beta) — Lifts Out, Passed & Call Order",
+            Changes:
+            [
+                "AI Scoreboard Scanner (Beta): Snap or pick a photo of the warmup room scoreboard from Setup or Live mode to automatically calculate Lifts Out, Lifts Passed, and Remaining Snatch Lifts using your own free Google AI Studio (Gemini Flash) API key.",
+                "Side-by-Side Snatch & Clean & Jerk Analysis: View both disciplines simultaneously, switch or exclude prior-session lifter rows, and tap any attempt cell to override weights or statuses.",
+                "Official IWF Calling-Order & S-Curve Projections: Replays completed attempts and projects undeclared 2nd/3rd attempts in whole kilograms using official IWF tie-break priority (Lowest Weight → Earlier Attempt # → Earlier Previous Attempt Sequence → Lower Lot #).",
+                "Show Your Work, Photo Zoom & Error Reporting: Inspect the projected platform call order, expand/zoom the scoreboard photo up to 3x, clear results anytime, or email an analysis diagnostic report straight from the scanner."
+            ]),
+        new AppReleaseNote(
             Version: "2.0.31",
             Title: "Streamlined Help Guide, System Clock Format & PiP Theme Sync",
             Changes:

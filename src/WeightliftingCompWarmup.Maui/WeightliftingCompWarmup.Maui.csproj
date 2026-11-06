@@ -17,8 +17,8 @@
     <!-- Display name & identifiers -->
     <ApplicationTitle>Comp OWL</ApplicationTitle>
     <ApplicationId>com.weightlifting.compwarmup</ApplicationId>
-    <ApplicationDisplayVersion>2.0.31</ApplicationDisplayVersion>
-    <ApplicationVersion>33</ApplicationVersion>
+    <ApplicationDisplayVersion>2.0.45</ApplicationDisplayVersion>
+    <ApplicationVersion>47</ApplicationVersion>
 
     <!-- Supported OS versions for Phone, Tablet & Desktop preview -->
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
@@ -39,9 +39,19 @@
     <TrimmerRootAssembly Include="WeightliftingCompWarmup.Core" />
   </ItemGroup>
 
+  <!-- Preserve AndroidX ActivityResultContracts (PickVisualMedia$ImageOnly.INSTANCE) during R8 shrinking -->
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <ProguardConfiguration Include="Platforms\Android\proguard.cfg" />
+  </ItemGroup>
+
   <!-- App Icon & Splash Screen Artwork (Android Adaptive Icon, iOS AppIconSet, Windows ICO) -->
-  <ItemGroup>
+  <ItemGroup Condition="'$(UseDevIcon)' != 'true'">
     <MauiIcon Include="Resources\AppIcon\appicon.png" ForegroundFile="Resources\AppIcon\appicon_fg.png" Color="#0F172A" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseDevIcon)' == 'true'">
+    <MauiIcon Include="Resources\AppIcon\Dev\appicon.png" ForegroundFile="Resources\AppIcon\Dev\appicon_fg.png" Color="#630D14" />
+  </ItemGroup>
+  <ItemGroup>
     <MauiSplashScreen Include="Resources\Splash\splash.png" Color="#0F172A" BaseSize="256,256" />
   </ItemGroup>
 

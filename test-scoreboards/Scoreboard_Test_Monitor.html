@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Comp OWL — Competition Scoreboard Test Monitor (6 Scenarios)</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    body {
+      background-color: #060a12;
+      color: #f8fafc;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+    }
+    .board-cell {
+      font-variant-numeric: tabular-nums;
+    }
+    .strike-miss {
+      text-decoration: line-through;
+      text-decoration-thickness: 2.5px;
+    }
+  </style>
+</head>
+<body class="antialiased select-none">
+
+  <!-- Top Controls Bar -->
+  <div id="controlsPanel" class="bg-slate-900 border border-slate-700 rounded-xl p-4 mb-5 shadow-lg max-w-7xl mx-auto">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <div>
+        <h1 class="text-lg font-bold text-white">📺 Competition Scoreboard Test Monitor (6 Scenarios)</h1>
+        <p class="text-xs text-slate-400">Select a scenario below, press F11 for full screen if desired, and scan the monitor with your phone camera in Comp OWL.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="toggleGuideBtn" onclick="toggleGuide()" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700">
+          📋 Hide Expected Results
+        </button>
+        <button onclick="enterCleanTvMode(true)" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-600 text-white hover:bg-sky-500">
+          📷 Clean TV Mode (Hide UI for Photo)
+        </button>
+      </div>
+    </div>
+
+    <!-- Scenario Buttons -->
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-2" id="scenarioButtons"></div>
+
+    <!-- Expected Results Cheat Sheet for Active Scenario -->
+    <div id="expectedGuide" class="mt-3 p-3 rounded-lg border border-slate-700 bg-slate-950 text-xs text-slate-300 space-y-1.5"></div>
+  </div>
+
+  <!-- Floating Restore Button when in Clean TV Mode -->
+  <div id="restoreControlsBar" class="hidden mb-2 max-w-7xl mx-auto flex justify-end">
+    <button onclick="enterCleanTvMode(false)" class="px-3 py-1 rounded bg-slate-800 text-slate-300 text-xs border border-slate-600 hover:bg-slate-700">
+      ⚙️ Show Scenario Controls
+    </button>
+  </div>
+
+  <!-- SCOREBOARD TV MONITOR DISPLAY -->
+  <div id="tvContainer" class="max-w-7xl mx-auto rounded-xl overflow-hidden border-2 border-slate-700 shadow-2xl">
+    <!-- Top TV Header Banner -->
+    <div id="tvHeader" class="px-6 py-4 flex flex-wrap items-center justify-between gap-4 border-b">
+      <div class="flex items-center gap-3">
+        <div id="tvSessionBadge" class="px-3 py-1 rounded font-black text-xs tracking-wider uppercase"></div>
+        <div>
+          <div id="tvTitle" class="font-extrabold text-xl tracking-wide"></div>
+          <div id="tvSubtitle" class="text-xs opacity-80"></div>
+        </div>
+      </div>
+      <div class="flex items-center gap-4">
+        <div id="tvCurrentBarBox" class="px-4 py-2 rounded-lg border text-right">
+          <div class="text-xs font-bold uppercase tracking-wider opacity-75">NEXT ON PLATFORM</div>
+          <div id="tvNextLifter" class="text-base font-extrabold"></div>
+        </div>
+        <div id="tvClockBox" class="px-4 py-2 rounded-lg border text-center min-w-[100px]">
+          <div class="text-xs font-bold uppercase tracking-wider opacity-75">CLOCK</div>
+          <div id="tvClock" class="text-xl font-black board-cell">1:00</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Scoreboard Table -->
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse text-base" id="scoreboardTable">
+        <thead>
+          <tr id="tableGroupHeader"></tr>
+          <tr id="tableColHeader"></tr>
+        </thead>
+        <tbody id="scoreboardBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Bottom TV Status Strip -->
+    <div id="tvFooter" class="px-6 py-2.5 text-xs flex flex-wrap items-center justify-between border-t">
+      <span id="tvFooterLeft"></span>
+      <span id="tvFooterRight" class="font-semibold"></span>
+    </div>
+  </div>
+
+  <script>
+    const scenarios = [
+      {
+        id: 1,
+        shortTitle: "1. Mid-Snatch (Strategic Opener + Auto +1kg)",
+        sessionBadge: "SESSION M81A • SNATCH IN PROGRESS",
+        title: "2026 STATE WEIGHTLIFTING CHAMPIONSHIPS — MEN 81 KG",
+        subtitle: "Warmup Room Scoreboard • OWLCMS Live Feed",
+        nextLifter: "86 kg — #2 ROSSI Marco (Att 2)",
+        clock: "0:54",
+        theme: "owlcms-dark",
+        footerLeft: "Green = Good Lift (✓)  |  Red Strikethrough = No Lift (✗)  |  Yellow Outline = Current / Next Call",
+        footerRight: "Current Bar: 86 kg • Discipline: SNATCH",
+        guideHtml: `
+          <div class="font-bold text-sky-400">Scenario 1: Mid-Snatch — Bar at 86 kg (Strategic 88kg Board Opener vs 95kg App Opener + Auto +1kg Placeholder)</div>
+          <div>• <strong>Chronological History (3 Lifts Passed):</strong>
+            1) Kim (Lot 2) made <code>85 kg</code> (Att 1) and declared <code>89 kg</code> for Att 2.
+            2) Rossi (Lot 4) missed <code>86 kg</code> (Att 1, went before Tanaka's 86 kg due to Lot 4 &lt; Lot 5) and auto-repeats <code>86 kg</code> on Att 2.
+            3) Tanaka (Lot 5) made <code>86 kg</code> (Att 1), so OWLCMS auto-populated <code>87 kg</code> (+1 kg placeholder) in Tanaka's Att 2 while Rossi is on the clock for Att 2 at <code>86 kg</code>!
+          </div>
+          <div>• <strong>Who you are:</strong> Row #5 <code>CUNNINGHAM Matthew</code> (Lot #7). Board shows <strong>88 kg</strong> for Snatch 1 (strategic placeholder >= 86 kg bar), while your real opener in the app is <strong>95 kg</strong>.</div>
+          <div>• <strong>Expected Snatch Analysis (with App Opener = 95 kg):</strong>
+            <strong>Lifts Passed = 3</strong>, <strong>Lifts Out = 8</strong> before your 95 kg opener:
+            1) Rossi 86kg (Att 2), 2) Morales 88kg (Att 1), 3) Kim 89kg (Att 2), 4) Tanaka 90kg (Att 2: board <code>87</code> +1kg replaced by +4kg → 90kg), 5) Rossi 90kg (Att 3 est. +4kg), 6) Morales 92kg (Att 2 est. +4kg), 7) Kim 93kg (Att 3 est. +4kg), 8) Tanaka 94kg (Att 3 est. +4kg).
+            Your 95 kg (Att 1, Lot 7) goes <em>before</em> Silva's 95 kg (Att 1, Lot 11) and Morales's 95/96 kg (Att 3)!
+          </div>
+        `,
+        lifters: [
+          { order: 1, lot: 2,  name: "KIM Min-Jun",        cat: "81", s1: {w:85, st:"G"}, s2: {w:89, st:"P"},   s3: {w:null, st:"E"}, bestS: 85,   cj1: {w:110, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 2, lot: 4,  name: "ROSSI Marco",        cat: "81", s1: {w:86, st:"M"}, s2: {w:86, st:"P", next:true}, s3: {w:null, st:"E"}, bestS: null, cj1: {w:112, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 3, lot: 5,  name: "TANAKA Kenji",       cat: "81", s1: {w:86, st:"G"}, s2: {w:87, st:"P"},   s3: {w:null, st:"E"}, bestS: 86,   cj1: {w:115, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 4, lot: 6,  name: "MORALES Diego",      cat: "81", s1: {w:88, st:"P"}, s2: {w:null, st:"E"}, s3: {w:null, st:"E"}, bestS: null, cj1: {w:116, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 5, lot: 7,  name: "CUNNINGHAM Matthew", cat: "81", s1: {w:88, st:"P"}, s2: {w:null, st:"E"}, s3: {w:null, st:"E"}, bestS: null, cj1: {w:120, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 6, lot: 11, name: "SILVA Lucas",        cat: "81", s1: {w:95, st:"P"}, s2: {w:null, st:"E"}, s3: {w:null, st:"E"}, bestS: null, cj1: {w:122, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 7, lot: 14, name: "NOVAK Lukas",        cat: "81", s1: {w:97, st:"P"}, s2: {w:null, st:"E"}, s3: {w:null, st:"E"}, bestS: null, cj1: {w:125, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null }
+        ]
+      },
+      {
+        id: 2,
+        shortTitle: "2. Snatch Opener Done (App Done w/ Snatch)",
+        sessionBadge: "SESSION M81A • LATE SNATCH",
+        title: "IWF GRAND PRIX QUALIFIER — MEN 81 KG",
+        subtitle: "Warmup Area Display • Snatch Final Attempts",
+        nextLifter: "97 kg — #7 NOVAK Lukas (Att 1)",
+        clock: "0:47",
+        theme: "iwf-blue",
+        footerLeft: "Snatch in progress • Clean & Jerk starts after 10-minute intermission",
+        footerRight: "Current Bar: 97 kg (Snatch)",
+        guideHtml: `
+          <div class="font-bold text-emerald-400">Scenario 2: You Have Already Lifted Your Snatch Opener on Stage (Bar at 97 kg)</div>
+          <div>• <strong>Chronological State:</strong> Lifters #1–#4 have finished all 3 Snatch attempts (85–94 kg). You (Row #5 <code>CUNNINGHAM Matthew</code>, Lot 7) and Silva (Lot 11) both made <strong>95 kg</strong> on Attempt 1 and declared <strong>99 kg</strong> for Attempt 2. Now <code>NOVAK Lukas</code> (Att 1 at <strong>97 kg</strong>) is next on the platform!</div>
+          <div>• <strong>Expected Snatch Block:</strong> Displays <span class="text-emerald-400 font-semibold">"✅ You have already lifted your Snatch opener on stage — the app is done with Snatch."</span> No Snatch Lifts Out calculation is shown.</div>
+          <div>• <strong>Expected Clean &amp; Jerk Block:</strong> Calculates C&amp;J <strong>Lifts Out = 7</strong> to your C&amp;J opener (<strong>120 kg</strong>) AND shows <strong>SNATCH LEFT = 7</strong> (Novak 3 + Cunningham 2 + Silva 2)!</div>
+        `,
+        lifters: [
+          { order: 1, lot: 2,  name: "KIM Min-Jun",        cat: "81", s1: {w:85, st:"G"}, s2: {w:89, st:"G"}, s3: {w:92, st:"M"}, bestS: 89,   cj1: {w:110, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 2, lot: 4,  name: "ROSSI Marco",        cat: "81", s1: {w:86, st:"M"}, s2: {w:86, st:"G"}, s3: {w:90, st:"G"}, bestS: 90,   cj1: {w:112, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 3, lot: 5,  name: "TANAKA Kenji",       cat: "81", s1: {w:86, st:"G"}, s2: {w:90, st:"G"}, s3: {w:94, st:"G"}, bestS: 94,   cj1: {w:115, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 4, lot: 6,  name: "MORALES Diego",      cat: "81", s1: {w:88, st:"G"}, s2: {w:92, st:"M"}, s3: {w:92, st:"G"}, bestS: 92,   cj1: {w:116, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 5, lot: 7,  name: "CUNNINGHAM Matthew", cat: "81", s1: {w:95, st:"G"}, s2: {w:99, st:"P"}, s3: {w:null, st:"E"}, bestS: 95,   cj1: {w:120, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 6, lot: 11, name: "SILVA Lucas",        cat: "81", s1: {w:95, st:"G"}, s2: {w:99, st:"P"}, s3: {w:null, st:"E"}, bestS: 95,   cj1: {w:122, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 7, lot: 14, name: "NOVAK Lukas",        cat: "81", s1: {w:97, st:"P", next:true}, s2: {w:null, st:"E"}, s3: {w:null, st:"E"}, bestS: null, cj1: {w:125, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null }
+        ]
+      },
+      {
+        id: 3,
+        shortTitle: "3. Snatch Concluded & C&J Up Next (No Green Fill)",
+        sessionBadge: "CLEAN & JERK • OPENER CALLS",
+        title: "NATIONAL CLUB SERIES — SESSION 4 SCOREBOARD",
+        subtitle: "Snatch Concluded • Clean & Jerk Starting (Plain Good Lift Cells)",
+        nextLifter: "110 kg — #1 KIM Min-Jun (C&J Att 1)",
+        clock: "1:00",
+        theme: "plain-good-dark",
+        footerLeft: "Note: This monitor style shows completed Good lifts in plain white text and Misses in red strikethrough",
+        footerRight: "Next Lift: Clean & Jerk 110 kg (#1 KIM)",
+        guideHtml: `
+          <div class="font-bold text-purple-400">Scenario 3: Snatch Fully Completed &amp; Clean &amp; Jerk Up Next (Plain White Good-Lift Cells)</div>
+          <div>• <strong>What this tests:</strong> Many competition scoreboards do <em>not</em> color-fill made lifts green — only misses are red/strikethrough. Every lifter has completed Snatch 1–3, and C&amp;J Attempt 1 (110 kg, Kim) is up next.</div>
+          <div>• <strong>Expected Snatch Block:</strong> Displays <span class="text-slate-200 font-semibold">"🏁 Snatching has concluded."</span> (Never says the barbell weight has passed your Snatch opener!)</div>
+          <div>• <strong>Expected Clean &amp; Jerk Block (with App C&amp;J Opener = 120 kg):</strong>
+            <strong>Lifts Passed = 0</strong>, <strong>SNATCH LEFT = 0</strong>, and calculates <strong>Lifts Out = 7</strong> before your 120 kg C&amp;J opener:
+            1) Kim 110 (Att 1), 2) Rossi 112 (Att 1), 3) Tanaka 115 (Att 1), 4) Kim 115 (Att 2 est. +5kg), 5) Morales 116 (Att 1), 6) Rossi 117 (Att 2 est. +5kg), 7) Kim 119 (Att 3 est. +4kg step-down).
+            (Tanaka's Att 2 is 115+5 = 120 kg, which goes <em>after</em> your 1st attempt at 120 kg!)
+          </div>
+        `,
+        lifters: [
+          { order: 1, lot: 2,  name: "KIM Min-Jun",        cat: "81", s1: {w:85, st:"G"}, s2: {w:89, st:"G"}, s3: {w:92, st:"M"}, bestS: 89,  cj1: {w:110, st:"P", next:true}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 2, lot: 4,  name: "ROSSI Marco",        cat: "81", s1: {w:86, st:"M"}, s2: {w:86, st:"G"}, s3: {w:90, st:"G"}, bestS: 90,  cj1: {w:112, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 3, lot: 5,  name: "TANAKA Kenji",       cat: "81", s1: {w:86, st:"G"}, s2: {w:90, st:"G"}, s3: {w:94, st:"G"}, bestS: 94,  cj1: {w:115, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 4, lot: 6,  name: "MORALES Diego",      cat: "81", s1: {w:88, st:"G"}, s2: {w:92, st:"M"}, s3: {w:92, st:"G"}, bestS: 92,  cj1: {w:116, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 5, lot: 7,  name: "CUNNINGHAM Matthew", cat: "81", s1: {w:95, st:"G"}, s2: {w:99, st:"G"}, s3: {w:102, st:"M"}, bestS: 99, cj1: {w:120, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 6, lot: 11, name: "SILVA Lucas",        cat: "81", s1: {w:95, st:"G"}, s2: {w:99, st:"M"}, s3: {w:99, st:"G"}, bestS: 99,  cj1: {w:122, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 7, lot: 14, name: "NOVAK Lukas",        cat: "81", s1: {w:97, st:"G"}, s2: {w:101, st:"G"}, s3: {w:104, st:"G"}, bestS: 104, cj1: {w:125, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null }
+        ]
+      },
+      {
+        id: 4,
+        shortTitle: "4. Mid-Clean & Jerk (Active C&J Progression)",
+        sessionBadge: "CLEAN & JERK IN PROGRESS",
+        title: "2026 STATE WEIGHTLIFTING CHAMPIONSHIPS — MEN 81 KG",
+        subtitle: "Clean & Jerk Phase • Bar at 116 kg (6 C&J Lifts Completed)",
+        nextLifter: "116 kg — #2 ROSSI Marco (C&J Att 2)",
+        clock: "0:48",
+        theme: "owlcms-dark",
+        footerLeft: "Green = Good Lift (✓)  |  Red Strikethrough = No Lift (✗)",
+        footerRight: "Current Bar: 116 kg • Discipline: CLEAN & JERK",
+        guideHtml: `
+          <div class="font-bold text-purple-400">Scenario 4: Mid-Clean &amp; Jerk Session — Bar at 116 kg (6 C&amp;J Lifts Passed)</div>
+          <div>• <strong>Chronological C&amp;J History (6 Lifts Passed):</strong>
+            1) Kim <code>110G</code> (Att 1), 2) Rossi <code>112G</code> (Att 1, declared 116 for Att 2), 3) Tanaka <code>115G</code> (Att 1, went before Kim's Att 2 at 115, declared 119 for Att 2), 4) Kim <code>115M</code> (Att 2), 5) Kim <code>115G</code> (Att 3 — finished C&amp;J at 115!), 6) Morales <code>116G</code> (Att 1 — went before Rossi's Att 2 at 116 kg, and OWLCMS auto-filled <code>117</code> +1kg in Morales's Att 2).
+            Now <code>ROSSI Marco</code> is on the platform for Attempt 2 at <strong>116 kg</strong>!
+          </div>
+          <div>• <strong>Expected Snatch Block:</strong> <span class="text-slate-200 font-semibold">"🏁 Snatching has concluded."</span></div>
+          <div>• <strong>Expected Clean &amp; Jerk Block (with App C&amp;J Opener = 120 kg):</strong>
+            <strong>Lifts Passed = 6</strong>, <strong>Lifts Out = 2</strong> before your 120 kg opener:
+            1) Rossi <code>116 kg</code> (Att 2 declared), 2) Tanaka <code>119 kg</code> (Att 2 declared).
+            (Morales's <code>117</code> +1kg placeholder after 116G is replaced by +5kg → <code>121 kg</code>, and Rossi's Att 3 is 116+5 = <code>121 kg</code> — both after your 120 kg opener!)
+          </div>
+        `,
+        lifters: [
+          { order: 1, lot: 2,  name: "KIM Min-Jun",        cat: "81", s1: {w:85, st:"G"}, s2: {w:89, st:"G"}, s3: {w:92, st:"M"}, bestS: 89,  cj1: {w:110, st:"G"}, cj2: {w:115, st:"M"}, cj3: {w:115, st:"G"}, bestCj: 115, total: 204 },
+          { order: 2, lot: 4,  name: "ROSSI Marco",        cat: "81", s1: {w:86, st:"M"}, s2: {w:86, st:"G"}, s3: {w:90, st:"G"}, bestS: 90,  cj1: {w:112, st:"G"}, cj2: {w:116, st:"P", next:true}, cj3: {w:null, st:"E"}, bestCj: 112, total: 202 },
+          { order: 3, lot: 5,  name: "TANAKA Kenji",       cat: "81", s1: {w:86, st:"G"}, s2: {w:90, st:"G"}, s3: {w:94, st:"G"}, bestS: 94,  cj1: {w:115, st:"G"}, cj2: {w:119, st:"P"}, cj3: {w:null, st:"E"}, bestCj: 115, total: 209 },
+          { order: 4, lot: 6,  name: "MORALES Diego",      cat: "81", s1: {w:88, st:"G"}, s2: {w:92, st:"M"}, s3: {w:92, st:"G"}, bestS: 92,  cj1: {w:116, st:"G"}, cj2: {w:117, st:"P"}, cj3: {w:null, st:"E"}, bestCj: 116, total: 208 },
+          { order: 5, lot: 7,  name: "CUNNINGHAM Matthew", cat: "81", s1: {w:95, st:"G"}, s2: {w:99, st:"G"}, s3: {w:102, st:"M"}, bestS: 99, cj1: {w:120, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 6, lot: 11, name: "SILVA Lucas",        cat: "81", s1: {w:95, st:"G"}, s2: {w:99, st:"M"}, s3: {w:99, st:"G"}, bestS: 99,  cj1: {w:122, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 7, lot: 14, name: "NOVAK Lukas",        cat: "81", s1: {w:97, st:"G"}, s2: {w:101, st:"G"}, s3: {w:104, st:"G"}, bestS: 104, cj1: {w:125, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null }
+        ]
+      },
+      {
+        id: 5,
+        shortTitle: "5. Bar Past App Opener (102kg Lifted vs 95kg App)",
+        sessionBadge: "SESSION M89A • HEAVY SNATCH",
+        title: "2026 STATE WEIGHTLIFTING CHAMPIONSHIPS — MEN 89 KG",
+        subtitle: "Edge Case Test: 102 kg Already Lifted on Platform",
+        nextLifter: "103 kg — #3 CUNNINGHAM Matthew (Snatch Att 1)",
+        clock: "1:00",
+        theme: "owlcms-dark",
+        footerLeft: "Tests warning when completed barbell weight on stage exceeds the opener weight entered in the app",
+        footerRight: "Current Bar: 103 kg (Max Completed: 102 kg)",
+        guideHtml: `
+          <div class="font-bold text-amber-400">Scenario 5: Barbell Weight on Stage (102 kg) Has Already Passed Your App Opener (if App Opener &lt; 102 kg)</div>
+          <div>• <strong>Chronological State (4 Lifts Passed):</strong> Kowalski made <code>98G</code> (Att 1), Bergstrom missed <code>100M</code> (Att 1) then made <code>100G</code> (Att 2, declared 104 for Att 3), and Kowalski made <code>102G</code> (Att 2, declared 105 for Att 3). You (<code>CUNNINGHAM Matthew</code>) are up next at <strong>103 kg</strong> on the board.</div>
+          <div>• <strong>If your App Snatch Opener is still set to 95 kg:</strong> Comp OWL displays the amber warning: <em>"⚠️ Cannot determine Lifts Out: 102 kg has already been lifted on the scoreboard, which is heavier than your 95 kg Opener in the app. Lifts Out will be left as-is."</em></div>
+          <div>• <strong>Tip:</strong> Tap <code>YOUR SNATCH OPENER</code> in the scanner and change it to <strong>103 kg</strong> (0 Lifts Out) or <strong>106 kg</strong> (3 Lifts Out: Bergstrom 104 Att 3, Hassan 105 Att 1, Kowalski 105 Att 3) to see it calculate!</div>
+        `,
+        lifters: [
+          { order: 1, lot: 3,  name: "KOWALSKI Piotr",     cat: "89", s1: {w:98, st:"G"},  s2: {w:102, st:"G"}, s3: {w:105, st:"P"}, bestS: 102, cj1: {w:125, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 2, lot: 5,  name: "BERGSTROM Erik",     cat: "89", s1: {w:100, st:"M"}, s2: {w:100, st:"G"}, s3: {w:104, st:"P"}, bestS: 100, cj1: {w:127, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 3, lot: 7,  name: "CUNNINGHAM Matthew", cat: "89", s1: {w:103, st:"P", next:true}, s2: {w:null, st:"E"}, s3: {w:null, st:"E"}, bestS: null, cj1: {w:130, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 4, lot: 9,  name: "HASSAN Tariq",       cat: "89", s1: {w:105, st:"P"}, s2: {w:null, st:"E"}, s3: {w:null, st:"E"}, bestS: null, cj1: {w:132, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 5, lot: 12, name: "DAVIS Marcus",       cat: "89", s1: {w:108, st:"P"}, s2: {w:null, st:"E"}, s3: {w:null, st:"E"}, bestS: null, cj1: {w:135, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null }
+        ]
+      },
+      {
+        id: 6,
+        shortTitle: "6. Lighter Weights (40–65kg • Light Theme)",
+        sessionBadge: "SESSION W59A • SNATCH",
+        title: "CLUB OPEN MEET — LIGHTER WEIGHT BRACKET (+2kg / +3kg JUMPS)",
+        subtitle: "High-Contrast White Scoreboard Theme • Tests 40kg (+2kg) & 65kg (+3kg) Estimated Jumps",
+        nextLifter: "41 kg — #2 NGUYEN Linh (Snatch Att 1)",
+        clock: "0:58",
+        theme: "club-light",
+        footerLeft: "Light background scoreboard • Tests +2kg (~40kg) and +3kg (~65kg) jump estimation with no 3rd-attempt step-down",
+        footerRight: "Current Bar: 41 kg • Discipline: SNATCH",
+        guideHtml: `
+          <div class="font-bold text-sky-400">Scenario 6: Lighter Weight Brackets (~40 kg → +2 kg, ~65 kg → +3 kg) &amp; High-Contrast Light Theme</div>
+          <div>• <strong>Chronological State (1 Lift Passed):</strong> Parker (Lot 1) just made <code>40 kg</code> (Att 1) and OWLCMS auto-filled <code>41 kg</code> (+1 kg placeholder) into Parker's Att 2. At <code>41 kg</code>, <code>NGUYEN Linh</code> (Att 1 at 41 kg) goes <em>before</em> Parker (Att 2 at 41 kg), so Nguyen is legitimately <strong>NEXT ON PLATFORM</strong> while Parker's +1 kg placeholder is on the board!</div>
+          <div>• <strong>Tip:</strong> Tap <code>YOUR SNATCH OPENER</code> and set it to <strong>65 kg</strong> (matching Row #5 <code>CUNNINGHAM Matthew</code>) to see every lighter lifter's 1st, 2nd (+2kg/+3kg), and 3rd (+2kg/+3kg) attempts scheduled before 65 kg!</div>
+        `,
+        lifters: [
+          { order: 1, lot: 1, name: "PARKER Chloe",       cat: "59", s1: {w:40, st:"G"}, s2: {w:41, st:"P"}, s3: {w:null, st:"E"}, bestS: 40,   cj1: {w:52, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 2, lot: 3, name: "NGUYEN Linh",        cat: "59", s1: {w:41, st:"P", next:true}, s2: {w:null, st:"E"}, s3: {w:null, st:"E"}, bestS: null, cj1: {w:55, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 3, lot: 5, name: "GARCIA Sofia",       cat: "59", s1: {w:52, st:"P"}, s2: {w:null, st:"E"}, s3: {w:null, st:"E"}, bestS: null, cj1: {w:66, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 4, lot: 6, name: "MILLER Hannah",      cat: "59", s1: {w:58, st:"P"}, s2: {w:null, st:"E"}, s3: {w:null, st:"E"}, bestS: null, cj1: {w:74, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null },
+          { order: 5, lot: 7, name: "CUNNINGHAM Matthew", cat: "59", s1: {w:65, st:"P"}, s2: {w:null, st:"E"}, s3: {w:null, st:"E"}, bestS: null, cj1: {w:85, st:"P"}, cj2: {w:null, st:"E"}, cj3: {w:null, st:"E"}, bestCj: null, total: null }
+        ]
+      }
+    ];
+
+    let activeScenarioId = 1;
+    let showGuide = true;
+
+    function renderScenarioButtons() {
+      const container = document.getElementById("scenarioButtons");
+      container.innerHTML = scenarios.map(s => {
+        const active = s.id === activeScenarioId;
+        const cls = active
+          ? "px-3 py-2 rounded-lg text-xs font-bold text-left bg-sky-600 text-white border border-sky-400 shadow"
+          : "px-3 py-2 rounded-lg text-xs font-semibold text-left bg-slate-950 text-slate-300 border border-slate-700 hover:bg-slate-800";
+        return `<button onclick="selectScenario(${s.id})" class="${cls}">${s.shortTitle}</button>`;
+      }).join("");
+    }
+
+    function toggleGuide() {
+      showGuide = !showGuide;
+      document.getElementById("expectedGuide").classList.toggle("hidden", !showGuide);
+      document.getElementById("toggleGuideBtn").textContent = showGuide ? "📋 Hide Expected Results" : "📋 Show Expected Results";
+    }
+
+    function enterCleanTvMode(clean) {
+      document.getElementById("controlsPanel").classList.toggle("hidden", clean);
+      document.getElementById("restoreControlsBar").classList.toggle("hidden", !clean);
+    }
+
+    function formatAttemptCell(cell, theme) {
+      if (!cell || cell.st === "E" || !cell.w) {
+        const emptyClasses = theme === "club-light"
+          ? "border-slate-300 bg-slate-50 text-slate-400"
+          : "border-slate-700/80 bg-slate-900/60 text-slate-600";
+        return `<td class="px-4 py-3.5 text-center board-cell border ${emptyClasses}">—</td>`;
+      }
+
+      const w = cell.w;
+      const nextRing = cell.next ? "ring-2 ring-amber-400 ring-inset" : "";
+
+      if (cell.st === "G") {
+        if (theme === "plain-good-dark") {
+          return `<td class="px-4 py-3.5 text-center font-extrabold text-lg board-cell border border-slate-700 bg-slate-800/90 text-white">${w}</td>`;
+        }
+        if (theme === "club-light") {
+          return `<td class="px-4 py-3.5 text-center font-extrabold text-lg board-cell border border-emerald-600 bg-emerald-100 text-emerald-950">${w} ✓</td>`;
+        }
+        return `<td class="px-4 py-3.5 text-center font-extrabold text-lg board-cell border border-emerald-500/70 bg-emerald-900/85 text-emerald-100">${w}</td>`;
+      }
+
+      if (cell.st === "M") {
+        if (theme === "club-light") {
+          return `<td class="px-4 py-3.5 text-center font-extrabold text-lg board-cell border border-red-600 bg-red-100 text-red-900 strike-miss">-${w}-</td>`;
+        }
+        return `<td class="px-4 py-3.5 text-center font-extrabold text-lg board-cell border border-red-500/80 bg-red-950/90 text-red-200 strike-miss">${w}</td>`;
+      }
+
+      if (theme === "club-light") {
+        const bg = cell.next ? "bg-amber-100 text-slate-950 font-black" : "bg-white text-slate-900 font-bold";
+        return `<td class="px-4 py-3.5 text-center text-lg board-cell border border-slate-300 ${bg} ${nextRing}">${w}</td>`;
+      }
+
+      const pendingBg = cell.next
+        ? "bg-amber-500/20 text-amber-200 font-black"
+        : "bg-slate-800/40 text-slate-200 font-semibold";
+      return `<td class="px-4 py-3.5 text-center text-lg board-cell border border-slate-700 ${pendingBg} ${nextRing}">${w}</td>`;
+    }
+
+    function selectScenario(id) {
+      activeScenarioId = id;
+      renderScenarioButtons();
+      const s = scenarios.find(x => x.id === id);
+      if (!s) return;
+
+      document.getElementById("expectedGuide").innerHTML = s.guideHtml;
+
+      const tvContainer = document.getElementById("tvContainer");
+      const tvHeader = document.getElementById("tvHeader");
+      const tvFooter = document.getElementById("tvFooter");
+      const badge = document.getElementById("tvSessionBadge");
+      const barBox = document.getElementById("tvCurrentBarBox");
+      const clockBox = document.getElementById("tvClockBox");
+
+      if (s.theme === "club-light") {
+        tvContainer.className = "max-w-7xl mx-auto rounded-xl overflow-hidden border-2 border-slate-400 shadow-xl bg-white text-slate-900";
+        tvHeader.className = "px-6 py-4 flex flex-wrap items-center justify-between gap-4 border-b border-slate-300 bg-slate-100 text-slate-900";
+        badge.className = "px-3 py-1 rounded font-black text-xs tracking-wider uppercase bg-sky-700 text-white";
+        barBox.className = "px-4 py-2 rounded-lg border border-amber-500 bg-amber-50 text-slate-900 text-right";
+        clockBox.className = "px-4 py-2 rounded-lg border border-slate-400 bg-white text-slate-900 text-center min-w-[100px]";
+        tvFooter.className = "px-6 py-2.5 text-xs flex flex-wrap items-center justify-between border-t border-slate-300 bg-slate-100 text-slate-700";
+      } else if (s.theme === "iwf-blue") {
+        tvContainer.className = "max-w-7xl mx-auto rounded-xl overflow-hidden border-2 border-blue-500/60 shadow-2xl bg-[#07132B] text-white";
+        tvHeader.className = "px-6 py-4 flex flex-wrap items-center justify-between gap-4 border-b border-blue-800 bg-[#0C214A] text-white";
+        badge.className = "px-3 py-1 rounded font-black text-xs tracking-wider uppercase bg-amber-400 text-slate-950";
+        barBox.className = "px-4 py-2 rounded-lg border border-amber-400/70 bg-amber-500/10 text-amber-200 text-right";
+        clockBox.className = "px-4 py-2 rounded-lg border border-blue-500 bg-[#07132B] text-amber-300 text-center min-w-[100px]";
+        tvFooter.className = "px-6 py-2.5 text-xs flex flex-wrap items-center justify-between border-t border-blue-900 bg-[#0A1938] text-blue-200";
+      } else {
+        tvContainer.className = "max-w-7xl mx-auto rounded-xl overflow-hidden border-2 border-slate-700 shadow-2xl bg-[#090E17] text-slate-100";
+        tvHeader.className = "px-6 py-4 flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 bg-[#111827] text-slate-100";
+        badge.className = "px-3 py-1 rounded font-black text-xs tracking-wider uppercase bg-sky-600 text-white";
+        barBox.className = "px-4 py-2 rounded-lg border border-amber-500/60 bg-amber-500/10 text-amber-300 text-right";
+        clockBox.className = "px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-emerald-400 text-center min-w-[100px]";
+        tvFooter.className = "px-6 py-2.5 text-xs flex flex-wrap items-center justify-between border-t border-slate-800 bg-[#111827] text-slate-400";
+      }
+
+      badge.textContent = s.sessionBadge;
+      document.getElementById("tvTitle").textContent = s.title;
+      document.getElementById("tvSubtitle").textContent = s.subtitle;
+      document.getElementById("tvNextLifter").textContent = s.nextLifter;
+      document.getElementById("tvClock").textContent = s.clock;
+      document.getElementById("tvFooterLeft").textContent = s.footerLeft;
+      document.getElementById("tvFooterRight").textContent = s.footerRight;
+
+      const isLight = s.theme === "club-light";
+      const thBase = isLight
+        ? "border border-slate-300 bg-slate-200 text-slate-800"
+        : "border border-slate-700 bg-slate-900 text-slate-300";
+      const snHeader = isLight
+        ? "border border-slate-300 bg-sky-100 text-sky-900"
+        : "border border-slate-700 bg-sky-950/80 text-sky-300";
+      const cjHeader = isLight
+        ? "border border-slate-300 bg-purple-100 text-purple-900"
+        : "border border-slate-700 bg-purple-950/80 text-purple-300";
+
+      document.getElementById("tableGroupHeader").innerHTML = `
+        <th colspan="3" class="px-3 py-2 text-left text-xs font-extrabold uppercase tracking-wider ${thBase}">ATHLETE INFORMATION</th>
+        <th colspan="4" class="px-3 py-2 text-center text-xs font-extrabold uppercase tracking-wider ${snHeader}">SNATCH (KG)</th>
+        <th colspan="4" class="px-3 py-2 text-center text-xs font-extrabold uppercase tracking-wider ${cjHeader}">CLEAN &amp; JERK (KG)</th>
+        <th class="px-3 py-2 text-center text-xs font-extrabold uppercase tracking-wider ${thBase}">TOTAL</th>
+      `;
+
+      document.getElementById("tableColHeader").innerHTML = `
+        <th class="px-3 py-2 text-center text-xs font-bold ${thBase}">LOT</th>
+        <th class="px-4 py-2 text-left text-xs font-bold ${thBase}">NAME</th>
+        <th class="px-3 py-2 text-center text-xs font-bold ${thBase}">CAT</th>
+        <th class="px-4 py-2 text-center text-xs font-bold ${snHeader}">1</th>
+        <th class="px-4 py-2 text-center text-xs font-bold ${snHeader}">2</th>
+        <th class="px-4 py-2 text-center text-xs font-bold ${snHeader}">3</th>
+        <th class="px-4 py-2 text-center text-xs font-bold ${snHeader}">BEST</th>
+        <th class="px-4 py-2 text-center text-xs font-bold ${cjHeader}">1</th>
+        <th class="px-4 py-2 text-center text-xs font-bold ${cjHeader}">2</th>
+        <th class="px-4 py-2 text-center text-xs font-bold ${cjHeader}">3</th>
+        <th class="px-4 py-2 text-center text-xs font-bold ${cjHeader}">BEST</th>
+        <th class="px-4 py-2 text-center text-xs font-bold ${thBase}">TOT</th>
+      `;
+
+      const tbody = document.getElementById("scoreboardBody");
+      tbody.innerHTML = s.lifters.map((r, idx) => {
+        const rowBg = isLight
+          ? (idx % 2 === 0 ? "bg-white" : "bg-slate-50/80")
+          : (idx % 2 === 0 ? "bg-[#0D1526]" : "bg-[#111C33]");
+        const cellBorder = isLight ? "border-slate-300" : "border-slate-700/80";
+        const textPrimary = isLight ? "text-slate-900" : "text-white";
+        const textSecondary = isLight ? "text-slate-600" : "text-slate-400";
+
+        return `
+          <tr class="${rowBg}">
+            <td class="px-3 py-3.5 text-center font-bold board-cell border ${cellBorder} ${textSecondary}">${r.lot}</td>
+            <td class="px-4 py-3.5 font-extrabold tracking-wide border ${cellBorder} ${textPrimary}">${r.name}</td>
+            <td class="px-3 py-3.5 text-center text-xs font-bold border ${cellBorder} ${textSecondary}">${r.cat}</td>
+            ${formatAttemptCell(r.s1, s.theme)}
+            ${formatAttemptCell(r.s2, s.theme)}
+            ${formatAttemptCell(r.s3, s.theme)}
+            <td class="px-4 py-3.5 text-center font-black board-cell border ${cellBorder} ${isLight ? "bg-sky-50 text-sky-900" : "bg-slate-900/90 text-sky-300"}">${r.bestS ?? "—"}</td>
+            ${formatAttemptCell(r.cj1, s.theme)}
+            ${formatAttemptCell(r.cj2, s.theme)}
+            ${formatAttemptCell(r.cj3, s.theme)}
+            <td class="px-4 py-3.5 text-center font-black board-cell border ${cellBorder} ${isLight ? "bg-purple-50 text-purple-900" : "bg-slate-900/90 text-purple-300"}">${r.bestCj ?? "—"}</td>
+            <td class="px-4 py-3.5 text-center font-black board-cell border ${cellBorder} ${textPrimary}">${r.total ?? "—"}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    selectScenario(1);
+  </script>
+</body>
+</html>

@@ -1400,6 +1400,25 @@ public class MainPage : ContentPage
             adjustCommand: _vm.AdjustSetupLiftsOutCommand,
             onTapEdit: OnEditSetupLiftsOutClicked));
 
+        var scanScoreboardSetupBtn = new Button
+        {
+            Text = compact
+                ? "📷 Scan Scoreboard (AI • BETA)"
+                : "📷 Scan Scoreboard Photo (AI • BETA)",
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            BorderColor = AppThemeManager.Color("#38BDF8"),
+            BorderWidth = 1,
+            TextColor = AppThemeManager.Color("#38BDF8"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = compact ? 12 : 12.5,
+            CornerRadius = 8,
+            HeightRequest = 36,
+            HorizontalOptions = LayoutOptions.Fill,
+            Padding = new Thickness(10, 0)
+        };
+        scanScoreboardSetupBtn.Clicked += OnOpenScoreboardScannerClicked;
+        stack.Add(scanScoreboardSetupBtn);
+
         stack.Add(BuildStepperParamRow(
             title: "Stage lift time (sec)",
             subtitle: "Average duration per competition attempt",
@@ -2681,7 +2700,7 @@ public class MainPage : ContentPage
                 new ColumnDefinition { Width = GridLength.Star },
                 new ColumnDefinition { Width = GridLength.Auto }
             },
-            ColumnSpacing = compact ? 5 : 6
+            ColumnSpacing = compact ? 3 : 6
         };
 
         liftsOutRow.Add(new Label
@@ -2689,11 +2708,13 @@ public class MainPage : ContentPage
             Text = "Lifts Out:",
             TextColor = AppThemeManager.Color("#E2E8F0"),
             FontAttributes = FontAttributes.Bold,
-            FontSize = compact ? 12 : 13,
-            VerticalTextAlignment = TextAlignment.Center
+            FontSize = compact ? 11 : 13,
+            VerticalTextAlignment = TextAlignment.Center,
+            MaxLines = 1,
+            LineBreakMode = LineBreakMode.NoWrap
         }, 0, 0);
 
-        liftsOutRow.Add(CreateStepButton("-", _vm.AdjustLiveLiftsOutCommand, "-1", compact ? 34 : 40, compact ? 32 : 36), 1, 0);
+        liftsOutRow.Add(CreateStepButton("-", _vm.AdjustLiveLiftsOutCommand, "-1", compact ? 28 : 40, compact ? 30 : 36), 1, 0);
 
         var liftsOutValueBtn = new Button
         {
@@ -2702,24 +2723,46 @@ public class MainPage : ContentPage
             BorderWidth = 1,
             TextColor = AppThemeManager.Color("#FACC15"),
             FontAttributes = FontAttributes.Bold,
-            FontSize = compact ? 14 : 15,
+            FontSize = compact ? 13 : 15,
             CornerRadius = 6,
-            WidthRequest = compact ? 46 : 52,
-            HeightRequest = compact ? 32 : 36,
+            MinimumWidthRequest = 0,
+            WidthRequest = compact ? 34 : 52,
+            HeightRequest = compact ? 30 : 36,
             Padding = Thickness.Zero
         };
         liftsOutValueBtn.SetBinding(Button.TextProperty, nameof(MainViewModel.LiveLiftsOut));
         liftsOutValueBtn.Clicked += OnEditLiveLiftsOutClicked;
         liftsOutRow.Add(liftsOutValueBtn, 2, 0);
 
-        liftsOutRow.Add(CreateStepButton("+", _vm.AdjustLiveLiftsOutCommand, "1", compact ? 34 : 40, compact ? 32 : 36), 3, 0);
+        liftsOutRow.Add(CreateStepButton("+", _vm.AdjustLiveLiftsOutCommand, "1", compact ? 28 : 40, compact ? 30 : 36), 3, 0);
+
+        var liveScanBtn = new Button
+        {
+            Text = compact ? "📷 Scan (Beta)" : "📷 Scan Board (Beta)",
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
+            BorderColor = AppThemeManager.Color("#38BDF8"),
+            BorderWidth = 1,
+            TextColor = AppThemeManager.Color("#38BDF8"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = compact ? 10 : 12,
+            CornerRadius = 6,
+            MinimumWidthRequest = 0,
+            HeightRequest = compact ? 30 : 36,
+            HorizontalOptions = LayoutOptions.Center,
+            Padding = new Thickness(compact ? 5 : 10, 0)
+        };
+        liveScanBtn.Clicked += OnOpenScoreboardScannerClicked;
+        liftsOutRow.Add(liveScanBtn, 4, 0);
 
         var passedLbl = new Label
         {
             TextColor = AppThemeManager.Color("#94A3B8"),
             FontSize = compact ? 11 : 12,
+            HorizontalOptions = LayoutOptions.End,
             HorizontalTextAlignment = TextAlignment.End,
-            VerticalTextAlignment = TextAlignment.Center
+            VerticalTextAlignment = TextAlignment.Center,
+            MaxLines = 1,
+            LineBreakMode = LineBreakMode.NoWrap
         };
         passedLbl.SetBinding(Label.TextProperty, new Binding(nameof(MainViewModel.LiveLiftsPassed), stringFormat: "Passed: {0}"));
         liftsOutRow.Add(passedLbl, 5, 0);
@@ -3290,6 +3333,14 @@ public class MainPage : ContentPage
         if (Navigation.ModalStack.Count == 0)
         {
             await Navigation.PushModalAsync(new HelpAboutModalPage(startOnAboutTab: false, onSelectTheme: pref => _vm.SetThemePreference(pref)), animated: true);
+        }
+    }
+
+    private async void OnOpenScoreboardScannerClicked(object? sender, EventArgs e)
+    {
+        if (Navigation.ModalStack.Count == 0)
+        {
+            await Navigation.PushModalAsync(new ScoreboardScannerModalPage(_vm), animated: true);
         }
     }
 
