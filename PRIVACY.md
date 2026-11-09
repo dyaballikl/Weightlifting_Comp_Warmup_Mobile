@@ -1,7 +1,7 @@
 # Privacy Policy for Comp OWL (Weightlifting Comp Warmup)
 
-**Effective Date:** October 26, 2026  
-**Last Updated:** October 26, 2026  
+**Effective Date:** November 9, 2026  
+**Last Updated:** November 9, 2026  
 
 **Developer:** Matt Cunningham (`@lifting_while_diabetic`)  
 **Application Name:** Comp OWL (Weightlifting Comp Warmup)  
@@ -28,7 +28,8 @@ Your privacy is important to us. **Comp OWL does not collect, transmit, rent, se
 ## 3. Device Permissions and Network Access
 
 - **Offline Operation:** All core warmup calculation, plate loading, and live countdown timer features function completely offline.
-- **Optional Camera & Scoreboard Scanner (Beta):** Comp OWL requests Camera / Photo Library permission solely when you choose to use the optional **AI Scoreboard Scanner (Beta)** to take or select a photo of a competition scoreboard. When you initiate a scan, the selected scoreboard photo is sent directly from your device to Google's Gemini API (`generativelanguage.googleapis.com`) using your own user-supplied Google AI Studio API key stored locally on your device (`gemini_api_key.txt`). Comp OWL does not operate any intermediary servers and never receives or stores your photos or API key.
+- **Optional Camera & Scoreboard Scanner (Beta):** Comp OWL requests Camera / Photo Library permission solely when you choose to use the optional **AI Scoreboard Scanner (Beta)** to take or select a photo of a competition scoreboard. When you initiate a scan, the selected scoreboard photo is sent directly from your device to Google's Gemini API (`generativelanguage.googleapis.com`) using your own user-supplied Google AI Studio API key stored locally on your device (`gemini_api_key.txt`). Comp OWL does not operate any intermediary servers and never automatically receives or stores your photos or API key.
+- **Optional User-Initiated Error Reporting:** If you choose to tap **"Report Analysis Error"** inside the AI Scoreboard Scanner, Comp OWL opens a draft email in your device's email app (`compowl.app@gmail.com`) with the diagnostic analysis report and scoreboard photo attached (your API key is never included). Nothing is transmitted unless you manually review and send the email yourself in your email client.
 - **External Links:** The "About" screen contains optional links to the project's public GitHub repositories, the developer's Instagram profile, and an optional Ko-fi support page (`ko-fi.com/compowlapp`). Tapping these links opens your device's default web browser or app, which is governed by the respective third-party platform's privacy policy.
 
 ---
@@ -58,5 +59,6 @@ If this Privacy Policy is updated in the future, the revised policy will be post
 
 If you have any questions about this Privacy Policy or the application, you can contact the developer via:
 
+- **Email:** [compowl.app@gmail.com](mailto:compowl.app@gmail.com)
 - **GitHub Issues:** [https://github.com/dyaballikl/Weightlifting_Comp_Warmup_Mobile/issues](https://github.com/dyaballikl/Weightlifting_Comp_Warmup_Mobile/issues)
 - **Instagram:** [@lifting_while_diabetic](https://www.instagram.com/lifting_while_diabetic/)
