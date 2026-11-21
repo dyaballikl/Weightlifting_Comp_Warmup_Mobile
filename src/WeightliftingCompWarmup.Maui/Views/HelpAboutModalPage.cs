@@ -51,7 +51,7 @@ public class HelpAboutModalPage : ContentPage
     public const string AppShortName = "Comp OWL";
     public const string AppFullName = "Weightlifting Comp Warmup";
     public const string AppVersion = "2.0.46";
-    public const string AppBuild = "49";
+    public const string AppBuild = "50";
     public const string AppleAppStoreId = ""; // Populate with numeric App Store Connect ID once created
 
     public HelpAboutModalPage(

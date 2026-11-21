@@ -666,10 +666,11 @@ public class ScoreboardScannerModalPage : ContentPage
 
         var stack = new VerticalStackLayout { Spacing = 8 };
 
-        bool hasExistingData = (_photoBytes != null && _photoBytes.Length > 0) || _lifterRows.Count > 0;
+        // Only show Clear on the Capture bar if results exist without a photo card (since the Photo card already has Clear)
+        bool showTopClearBtn = (_photoBytes == null || _photoBytes.Length == 0) && _lifterRows.Count > 0;
         var btnGrid = new Grid
         {
-            ColumnDefinitions = hasExistingData
+            ColumnDefinitions = showTopClearBtn
                 ? new ColumnDefinitionCollection
                 {
                     new ColumnDefinition { Width = GridLength.Star },
@@ -713,7 +714,7 @@ public class ScoreboardScannerModalPage : ContentPage
         btnGrid.Add(cameraBtn, 0, 0);
         btnGrid.Add(pickBtn, 1, 0);
 
-        if (hasExistingData)
+        if (showTopClearBtn)
         {
             var clearResultsBtn = new Button
             {

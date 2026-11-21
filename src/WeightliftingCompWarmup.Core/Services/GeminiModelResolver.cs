@@ -204,10 +204,42 @@ public static class GeminiModelResolver
             }
         }
 
-        // Cap the fallback queue to at most 4 distinct models so we never cycle through a long list
+        // Remove redundant "-latest" aliases (e.g. gemini-flash-latest / gemini-pro-latest) when a numbered
+        // stable model of the same family is already queued, so fallback attempts hit distinct serving pools.
+        bool hasNumberedStableFlash = result.Any(m =>
+            VersionRegex.IsMatch(m) &&
+            m.Contains("flash", StringComparison.OrdinalIgnoreCase) &&
+            !m.Contains("lite", StringComparison.OrdinalIgnoreCase) &&
+            !m.Contains("preview", StringComparison.OrdinalIgnoreCase));
+        bool hasNumberedStablePro = result.Any(m =>
+            VersionRegex.IsMatch(m) &&
+            m.Contains("pro", StringComparison.OrdinalIgnoreCase) &&
+            !m.Contains("preview", StringComparison.OrdinalIgnoreCase));
+
+        if (hasNumberedStableFlash)
+        {
+            result.RemoveAll(m => string.Equals(m, "gemini-flash-latest", StringComparison.OrdinalIgnoreCase));
+        }
+        if (hasNumberedStablePro)
+        {
+            result.RemoveAll(m => string.Equals(m, "gemini-pro-latest", StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Cap the fallback queue to at most 4 distinct models while preserving the top Flash-Lite model
+        // as a last-resort backup in slot #4 during high-demand 503 surges on primary Flash/Pro pools.
         if (result.Count > 4)
         {
-            result = result.Take(4).ToList();
+            string? topFlashLite = result.FirstOrDefault(m =>
+                m.Contains("flash", StringComparison.OrdinalIgnoreCase) &&
+                m.Contains("lite", StringComparison.OrdinalIgnoreCase));
+
+            var capped = result.Take(4).ToList();
+            if (!string.IsNullOrWhiteSpace(topFlashLite) &&
+                !capped.Contains(topFlashLite, StringComparer.OrdinalIgnoreCase))
+            {
+                capped[3] = topFlashLite;
+            }
+            result = capped;
         }
 
         return result;

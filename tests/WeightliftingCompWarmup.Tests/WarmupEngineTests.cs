@@ -1236,6 +1236,33 @@ public class WarmupEngineTests
     }
 
     [Fact]
+    public void GeminiModelResolver_SkipsDuplicateLatestAliasAndPreservesFlashLiteBackupInTopFour()
+    {
+        string modelsJson = """
+        {
+          "models": [
+            { "name": "models/gemini-2.5-flash", "supportedGenerationMethods": ["generateContent"] },
+            { "name": "models/gemini-flash-latest", "supportedGenerationMethods": ["generateContent"] },
+            { "name": "models/gemini-3-flash-preview", "supportedGenerationMethods": ["generateContent"] },
+            { "name": "models/gemini-2.5-pro", "supportedGenerationMethods": ["generateContent"] },
+            { "name": "models/gemini-pro-latest", "supportedGenerationMethods": ["generateContent"] },
+            { "name": "models/gemini-3-pro-preview", "supportedGenerationMethods": ["generateContent"] },
+            { "name": "models/gemini-2.5-flash-lite", "supportedGenerationMethods": ["generateContent"] }
+          ]
+        }
+        """;
+
+        var ranked = GeminiModelResolver.RankAvailableVisionModelsFromJson(modelsJson);
+        var queue = GeminiModelResolver.BuildOrderedModelQueue(null, ranked);
+
+        Assert.Equal(4, queue.Count);
+        Assert.Equal("gemini-2.5-flash", queue[0]);
+        Assert.DoesNotContain("gemini-flash-latest", queue);
+        Assert.DoesNotContain("gemini-pro-latest", queue);
+        Assert.Equal("gemini-2.5-flash-lite", queue[3]);
+    }
+
+    [Fact]
     public void UnstartedCjAttempts_WhenAtt2IsEmpty_AreNormalizedToPendingWithZeroPassed()
     {
         // Mirrors the IWF Women 69 kg Group A scoreboard where Snatch is concluded (all 3 attempts completed),
