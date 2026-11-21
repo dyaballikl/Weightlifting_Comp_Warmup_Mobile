@@ -27,7 +27,12 @@ public class App : Microsoft.Maui.Controls.Application
         };
 
         bool wasBackgrounded = false;
-        window.Stopped += (_, _) => wasBackgrounded = true;
+        window.Stopped += (_, _) =>
+        {
+            wasBackgrounded = true;
+            _mainPage.OnAppBackgrounded();
+        };
+        window.Destroying += (_, _) => _mainPage.OnAppBackgrounded();
         window.Resumed += (_, _) =>
         {
             wasBackgrounded = false;

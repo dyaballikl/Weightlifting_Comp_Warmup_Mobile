@@ -286,6 +286,53 @@ public class DevicePlatformService
 #endif
     }
 
+    /// <summary>
+    /// Returns whether Android "Appear on top" overlay permission is granted (always false on non-Android).
+    /// </summary>
+    public static bool CanDrawAndroidOverlays()
+    {
+#if ANDROID
+        return AndroidFloatingTimerOverlay.CanDrawOverlays();
+#else
+        return false;
+#endif
+    }
+
+    /// <summary>
+    /// Opens Android's "Appear on top" overlay permission settings page directly for Comp OWL.
+    /// </summary>
+    public static bool OpenAndroidOverlaySettings()
+    {
+#if ANDROID
+        try
+        {
+            var activity = Microsoft.Maui.ApplicationModel.Platform.CurrentActivity;
+            var ctx = (Android.Content.Context?)activity ?? Android.App.Application.Context;
+            if (ctx == null)
+            {
+                return false;
+            }
+
+            string pkg = ctx.PackageName ?? DefaultPackageId;
+            var intent = new Android.Content.Intent(
+                Android.Provider.Settings.ActionManageOverlayPermission,
+                Android.Net.Uri.Parse($"package:{pkg}"));
+            if (activity == null)
+            {
+                intent.AddFlags(Android.Content.ActivityFlags.NewTask);
+            }
+            ctx.StartActivity(intent);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+#else
+        return false;
+#endif
+    }
+
 #if ANDROID
     private static void PromptAndroidOverlayPermissionIfNeeded()
     {
@@ -625,7 +672,21 @@ public class DevicePlatformService
                     // Use default packageId
                 }
 
-                string lookupUrl = $"https://itunes.apple.com/lookup?bundleId={Uri.EscapeDataString(packageId)}&country=au&t={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+                string countryParam = string.Empty;
+                try
+                {
+                    string region = System.Globalization.RegionInfo.CurrentRegion.TwoLetterISORegionName;
+                    if (!string.IsNullOrWhiteSpace(region) && region.Length == 2)
+                    {
+                        countryParam = $"&country={Uri.EscapeDataString(region.ToLowerInvariant())}";
+                    }
+                }
+                catch
+                {
+                    // Omit country parameter if region lookup is unavailable
+                }
+
+                string lookupUrl = $"https://itunes.apple.com/lookup?bundleId={Uri.EscapeDataString(packageId)}{countryParam}&t={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
                 using var response = await UpdateHttpClient.GetAsync(lookupUrl).ConfigureAwait(false);
                 if (response.IsSuccessStatusCode)
                 {

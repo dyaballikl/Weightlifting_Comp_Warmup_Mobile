@@ -43,7 +43,8 @@ public class ScrubbableProgressBar : GraphicsView
     public static readonly BindableProperty ScrubCommandProperty = BindableProperty.Create(
         nameof(ScrubCommand),
         typeof(ICommand),
-        typeof(ScrubbableProgressBar));
+        typeof(ScrubbableProgressBar),
+        propertyChanged: OnVisualPropertyChanged);
 
     public double Progress
     {
@@ -116,6 +117,7 @@ public class ScrubbableProgressBar : GraphicsView
         _drawable.OverlayText = OverlayText ?? string.Empty;
         _drawable.FillColorHex = string.IsNullOrWhiteSpace(FillColorHex) ? "#22C55E" : FillColorHex;
         _drawable.TrackColorHex = string.IsNullOrWhiteSpace(TrackColorHex) ? "#1E293B" : TrackColorHex;
+        _drawable.ShowScrubThumb = ScrubCommand != null;
 
         if (Handler != null)
         {
@@ -137,6 +139,7 @@ public class ScrubbableProgressDrawable : IDrawable
     public string OverlayText { get; set; } = string.Empty;
     public string FillColorHex { get; set; } = "#22C55E";
     public string TrackColorHex { get; set; } = "#1E293B";
+    public bool ShowScrubThumb { get; set; }
 
     public void Draw(ICanvas canvas, RectF dirtyRect)
     {
@@ -159,18 +162,46 @@ public class ScrubbableProgressDrawable : IDrawable
         // Progress fill
         double safeProgress = double.IsNaN(Progress) || double.IsInfinity(Progress) ? 0.0 : Math.Clamp(Progress, 0.0, 1.0);
         float fillWidth = (float)(dirtyRect.Width * safeProgress);
+        string effectiveFillHex = string.IsNullOrWhiteSpace(FillColorHex) ? "#22C55E" : FillColorHex;
         if (fillWidth > 1f)
         {
-            canvas.FillColor = Color.FromArgb(string.IsNullOrWhiteSpace(FillColorHex) ? "#22C55E" : FillColorHex);
+            canvas.FillColor = Color.FromArgb(effectiveFillHex);
             canvas.FillRoundedRectangle(dirtyRect.X, dirtyRect.Y, fillWidth, dirtyRect.Height, radius);
         }
 
-        // Overlay text
+        // Subtle thumb indicator for interactive scrub bars
+        if (ShowScrubThumb && dirtyRect.Height >= 18f)
+        {
+            float thumbW = 4f;
+            float thumbH = Math.Max(10f, dirtyRect.Height - 8f);
+            float thumbX = Math.Clamp(dirtyRect.X + fillWidth - (thumbW / 2f), dirtyRect.X + 3f, dirtyRect.Right - thumbW - 3f);
+            float thumbY = dirtyRect.Y + (dirtyRect.Height - thumbH) / 2f;
+            canvas.FillColor = Colors.White.WithAlpha(0.85f);
+            canvas.FillRoundedRectangle(thumbX, thumbY, thumbW, thumbH, 2f);
+        }
+
+        // Overlay text (draw subtle dark halo on light/yellow fills for crisp legibility across 0%-100%)
         if (!string.IsNullOrEmpty(OverlayText))
         {
             float textWidth = Math.Max(1f, dirtyRect.Width - 16f);
-            canvas.FontColor = Colors.White;
+            bool isBrightFill = effectiveFillHex.Equals("#EAB308", StringComparison.OrdinalIgnoreCase)
+                             || effectiveFillHex.Equals("#FACC15", StringComparison.OrdinalIgnoreCase);
+
             canvas.FontSize = 12f;
+            if (isBrightFill)
+            {
+                canvas.FontColor = Color.FromArgb("#0F172A").WithAlpha(0.70f);
+                canvas.DrawString(
+                    OverlayText,
+                    dirtyRect.X + 9f,
+                    dirtyRect.Y + 1f,
+                    textWidth,
+                    dirtyRect.Height,
+                    HorizontalAlignment.Center,
+                    VerticalAlignment.Center);
+            }
+
+            canvas.FontColor = Colors.White;
             canvas.DrawString(
                 OverlayText,
                 dirtyRect.X + 8f,

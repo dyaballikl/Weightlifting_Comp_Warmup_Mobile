@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="file" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path=".local/share/WeightliftingCompWarmup/gemini_api_key.txt" />
+        <exclude domain="file" path=".local/share/WeightliftingCompWarmup/last_working_gemini_model.txt" />
+        <exclude domain="file" path=".local/share/WeightliftingCompWarmup/live_session_state.json" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="file" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path=".local/share/WeightliftingCompWarmup/gemini_api_key.txt" />
+        <exclude domain="file" path=".local/share/WeightliftingCompWarmup/last_working_gemini_model.txt" />
+        <exclude domain="file" path=".local/share/WeightliftingCompWarmup/live_session_state.json" />
+    </device-transfer>
+</data-extraction-rules>

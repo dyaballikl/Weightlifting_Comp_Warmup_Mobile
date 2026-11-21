@@ -191,11 +191,12 @@ public static class WarmupCalculator
         }
 
         var steps = new List<WarmupStep>();
-        int totalSeconds = extras.Sum(x => x.Length);
+        int totalSeconds = 0;
         int order = 1;
 
         foreach (var extra in extras.OrderBy(x => x.Order))
         {
+            totalSeconds += extra.Length;
             steps.Add(new WarmupStep(
                 action: extra.Action,
                 weight: 0,
@@ -268,6 +269,8 @@ public static class WarmupCalculator
                         if (steps[i].IsLift)
                         {
                             steps[i].Length += bonus;
+                            steps[i].HasPresentationBuffer = true;
+                            steps[i].PresentationBufferSeconds = bonus;
                             totalSeconds += bonus;
                             for (int j = i; j < steps.Count; j++)
                             {

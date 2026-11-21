@@ -114,7 +114,8 @@ public record ScoreboardCallEntry(
     bool IsCompleted,
     bool IsUserTargetOpener,
     bool IsBeforeUserOpener,
-    string SequenceReasonNote);
+    string SequenceReasonNote,
+    bool IsSelfFollowTwoMinClock = false);
 
 /// <summary>
 /// Per-lifter summary for the "Show Your Work" breakdown table.
@@ -154,7 +155,8 @@ public record ScoreboardAnalysisResult(
     string? DisciplineConcludedMessage = null,
     bool IsUserOpenerCompleted = false,
     string? UserOpenerCompletedMessage = null,
-    bool HasDisciplineWeightsOnBoard = true);
+    bool HasDisciplineWeightsOnBoard = true,
+    int SelfFollowCountBeforeUser = 0);
 
 /// <summary>
 /// Live step-by-step progress update emitted during AI scoreboard scanning.
@@ -447,11 +449,10 @@ public static class ScoreboardCalculator
 
             // Similarly, if Attempt 3 has a weight strictly heavier than minPendingAny (or >= minPendingAtt1)
             // while earlier weights are still pending on the board, Attempt 3 cannot have been taken yet
-            // unless all 3 attempts on this row were completed in a prior session (already filtered by IsExcluded).
+            // under the IWF rising-bar rule (prior-session rows are already filtered by IsExcluded).
             if (a3.WeightKg is int w3 && w3 > 0 &&
                 a3.Status is ScoreboardAttemptStatus.Good or ScoreboardAttemptStatus.Miss &&
-                (w3 > minPendingAny || w3 >= minPendingAtt1) &&
-                a2.Status == ScoreboardAttemptStatus.Pending)
+                (w3 > minPendingAny || w3 >= minPendingAtt1))
             {
                 a3 = new ScoreboardAttemptCell(w3, ScoreboardAttemptStatus.Pending);
                 if (isSnatch) r.Snatch3 = a3;
@@ -951,6 +952,11 @@ public static class ScoreboardCalculator
                 && userTargetUpcomingIdx >= 0
                 && idx < userTargetUpcomingIdx;
 
+            int previousCallLifterIndex = idx > 0
+                ? rawUpcoming[idx - 1].Attempt.LifterIndex
+                : (completedCalls.Count > 0 ? completedCalls[^1].LifterIndex : -1);
+            bool isSelfFollow = !isUserOpener && attempt.LifterIndex == previousCallLifterIndex;
+
             string reason = isBarPastUserOpener && isUserOpener
                 ? $"⚠️ {maxCompletedWeightKg!.Value} kg has already been lifted on stage (> your {userOpenerWeight} kg app opener) — Lifts Out cannot be determined"
                 : BuildCallReasonNote(
@@ -961,6 +967,11 @@ public static class ScoreboardCalculator
                     isUserOpener,
                     isBefore,
                     boardDeclaredOpener);
+
+            if (isSelfFollow)
+            {
+                reason = $"{reason} • ⏱ 2-min clock (following self)";
+            }
 
             int phaseNum = isBefore
                 ? upcomingBeforeUser.Count + 1
@@ -978,7 +989,8 @@ public static class ScoreboardCalculator
                 IsCompleted: false,
                 IsUserTargetOpener: isUserOpener,
                 IsBeforeUserOpener: isBefore,
-                SequenceReasonNote: reason);
+                SequenceReasonNote: reason,
+                IsSelfFollowTwoMinClock: isSelfFollow);
 
             if (isUserOpener)
             {
@@ -1026,6 +1038,10 @@ public static class ScoreboardCalculator
             ? 0
             : upcomingBeforeUser.Count;
 
+        int selfFollowCountBeforeUser = (isDisciplineConcluded || userOpenerAlreadyCompleted || isBarPastUserOpener)
+            ? 0
+            : upcomingBeforeUser.Count(c => c.IsSelfFollowTwoMinClock);
+
         return new ScoreboardAnalysisResult(
             Discipline: discipline,
             UserLifterIndex: clampedUserIndex,
@@ -1047,7 +1063,8 @@ public static class ScoreboardCalculator
             DisciplineConcludedMessage: disciplineConcludedMessage,
             IsUserOpenerCompleted: userOpenerAlreadyCompleted,
             UserOpenerCompletedMessage: userOpenerCompletedMessage,
-            HasDisciplineWeightsOnBoard: hasDisciplineWeightsOnBoard);
+            HasDisciplineWeightsOnBoard: hasDisciplineWeightsOnBoard,
+            SelfFollowCountBeforeUser: selfFollowCountBeforeUser);
     }
 
     /// <summary>
@@ -1119,12 +1136,7 @@ public static class ScoreboardCalculator
 
         var overrides = discipline == LiftType.Snatch
             ? new[] { row.OverrideAttempt1Kg, row.OverrideAttempt2Kg, row.OverrideAttempt3Kg }
-            : new[]
-            {
-                row.OverrideCjAttempt1Kg ?? row.OverrideAttempt1Kg,
-                row.OverrideCjAttempt2Kg ?? row.OverrideAttempt2Kg,
-                row.OverrideCjAttempt3Kg ?? row.OverrideAttempt3Kg
-            };
+            : new[] { row.OverrideCjAttempt1Kg, row.OverrideCjAttempt2Kg, row.OverrideCjAttempt3Kg };
         var resolved = new List<ResolvedLifterAttempt>(3);
 
         // If all 3 cells on the board are completely empty and not the user, this lifter may not be competing in this discipline
@@ -1535,18 +1547,18 @@ public static class ScoreboardCalculator
                 return true;
             }
 
-            // 4. If every active lifter with Snatch data has all 3 Snatch cells populated (or Passed) AND C&J openers are on the board,
-            //    check whether Snatch has finished (including when OCR didn't detect green/red fill on completed Snatch3 cells).
+            // 4. Only consider Snatch concluded via attempt completion if every active lifter has completed/passed Snatch 3
+            //    (do NOT mark concluded merely because everyone has a Pending Snatch 3 while C&J openers are displayed on the board).
             var activeSnatchRows = rows
                 .Where(r => !r.IsExcluded && (HasCellContent(r.Snatch1) || HasCellContent(r.Snatch2) || HasCellContent(r.Snatch3)))
                 .ToList();
 
-            bool allReachedSnatch3OrPassed = activeSnatchRows.Count > 0 && activeSnatchRows.All(r =>
+            bool allCompletedSnatch3OrPassed = activeSnatchRows.Count > 0 && activeSnatchRows.All(r =>
                 r.Snatch1.Status == ScoreboardAttemptStatus.Pass ||
                 r.Snatch2.Status == ScoreboardAttemptStatus.Pass ||
-                HasCellContent(r.Snatch3));
+                r.Snatch3.Status is ScoreboardAttemptStatus.Good or ScoreboardAttemptStatus.Miss or ScoreboardAttemptStatus.Pass);
 
-            if (allReachedSnatch3OrPassed && anyCjData)
+            if (allCompletedSnatch3OrPassed)
             {
                 return true;
             }
@@ -1629,11 +1641,10 @@ public static class ScoreboardCalculator
             .ToList();
 
         if (activeSnatchRows.Count > 0 &&
-            HasAnyDisciplineData(rows, LiftType.CleanAndJerk) &&
             activeSnatchRows.All(r =>
                 r.Snatch1.Status == ScoreboardAttemptStatus.Pass ||
                 r.Snatch2.Status == ScoreboardAttemptStatus.Pass ||
-                HasCellContent(r.Snatch3)))
+                r.Snatch3.Status is ScoreboardAttemptStatus.Good or ScoreboardAttemptStatus.Miss or ScoreboardAttemptStatus.Pass))
         {
             return 0;
         }

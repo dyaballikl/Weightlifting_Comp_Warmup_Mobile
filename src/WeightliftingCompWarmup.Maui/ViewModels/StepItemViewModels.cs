@@ -23,6 +23,10 @@ public class SetupStepItemViewModel
 
     public static SetupStepItemViewModel FromStep(WarmupStep step, int barbellWeight)
     {
+        string presTag = step.HasPresentationBuffer && step.PresentationBufferSeconds > 0
+            ? $" • 🎤 +{WarmupCalculator.FormatSeconds(step.PresentationBufferSeconds)}"
+            : string.Empty;
+
         return new SetupStepItemViewModel
         {
             Order = step.Order,
@@ -33,7 +37,7 @@ public class SetupStepItemViewModel
             WeightDisplay = step.WeightDisplay,
             FormattedLength = step.FormattedLength,
             FormattedTotalLength = step.FormattedTotalLength,
-            FormattedTotalLengthReverse = $"from {step.FormattedTotalLengthReverse} out"
+            FormattedTotalLengthReverse = $"from {step.FormattedTotalLengthReverse} out{presTag}"
         };
     }
 }
@@ -51,6 +55,7 @@ public class LiveStepItemViewModel : INotifyPropertyChanged
     private double _progressFraction;
     private string _progressSummaryText = string.Empty;
     private string _countdownBadgeText = string.Empty;
+    private bool _isFinalTenSeconds;
 
     public int Order { get; init; }
     public int BarbellWeight { get; init; }
@@ -164,16 +169,32 @@ public class LiveStepItemViewModel : INotifyPropertyChanged
         _ => AppThemeManager.IsLightTheme ? "#475569" : "#94A3B8"
     };
 
+    public bool IsFinalTenSeconds
+    {
+        get => _isFinalTenSeconds;
+        set
+        {
+            if (_isFinalTenSeconds != value)
+            {
+                _isFinalTenSeconds = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(BadgeBackgroundHex));
+                OnPropertyChanged(nameof(BadgeTextHex));
+                OnPropertyChanged(nameof(RowBackgroundHex));
+            }
+        }
+    }
+
     public string BadgeBackgroundHex => Status switch
     {
-        StepRunStatus.Active => "#0F172A",
+        StepRunStatus.Active => IsFinalTenSeconds ? "#DC2626" : "#0F172A",
         StepRunStatus.Completed => AppThemeManager.IsLightTheme ? "#E2E8F0" : "#1E293B",
         _ => AppThemeManager.IsLightTheme ? "#F1F5F9" : "#0F172A"
     };
 
     public string BadgeTextHex => Status switch
     {
-        StepRunStatus.Active => "#FACC15",
+        StepRunStatus.Active => IsFinalTenSeconds ? "#FFFFFF" : "#FACC15",
         StepRunStatus.Completed => "#64748B",
         _ => AppThemeManager.IsLightTheme ? "#0284C7" : "#38BDF8"
     };
@@ -245,6 +266,7 @@ public class LiveStepItemViewModel : INotifyPropertyChanged
         ProgressFraction = snapshot.ProgressFraction;
         ProgressSummaryText = snapshot.ProgressSummaryText;
         CountdownBadgeText = snapshot.CountdownBadgeText;
+        IsFinalTenSeconds = snapshot.IsFinalTenSeconds;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

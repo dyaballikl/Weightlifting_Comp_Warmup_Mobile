@@ -2,7 +2,9 @@ param(
     [string]$MacBuildHost = "",
     [string]$MacUser = "",
     [switch]$AndroidOnly,
+    [switch]$DevApkOnly,
     [switch]$PlayStoreBundleOnly,
+    [switch]$BuildNumberOnly,
     [switch]$NoVersionBump
 )
 
@@ -37,7 +39,9 @@ $OldDisplayVersion = "$Major.$Minor.$Patch"
 $OldVersionCode = $VersionCode
 
 if (-not $NoVersionBump) {
-    $Patch += 1
+    if (-not $BuildNumberOnly) {
+        $Patch += 1
+    }
     $VersionCode += 1
     $DisplayVersion = "$Major.$Minor.$Patch"
 
@@ -146,13 +150,14 @@ if (-not $PlayStoreBundleOnly) {
     $SignedApk = Join-Path $ProjectRoot "src\WeightliftingCompWarmup.Maui\bin\Release\net10.0-android\publish\$SideloadAppId-Signed.apk"
     if (Test-Path $SignedApk) {
         Get-ChildItem -Path $AndroidOutDir -Filter "WeightliftingCompWarmup-*-Signed.apk" -ErrorAction SilentlyContinue | Remove-Item -Force
-        $DestApk = Join-Path $AndroidOutDir "WeightliftingCompWarmup-$DisplayVersion-Signed.apk"
+        $ApkFileName = if ($BuildNumberOnly) { "WeightliftingCompWarmup-$DisplayVersion-b$VersionCode-Signed.apk" } else { "WeightliftingCompWarmup-$DisplayVersion-Signed.apk" }
+        $DestApk = Join-Path $AndroidOutDir $ApkFileName
         Copy-Item $SignedApk $DestApk -Force
         Write-Host "Android APK ready: $DestApk" -ForegroundColor Green
     }
 }
 
-if ($HasKeystore) {
+if ($HasKeystore -and -not $DevApkOnly) {
     Write-Host ""
     Write-Host "=== Packaging Google Play Store Release AAB (v$DisplayVersion, build $VersionCode) ===" -ForegroundColor Cyan
 
@@ -182,7 +187,7 @@ if ($HasKeystore) {
     }
 }
 
-if (-not $AndroidOnly -and -not $PlayStoreBundleOnly) {
+if (-not $AndroidOnly -and -not $DevApkOnly -and -not $PlayStoreBundleOnly) {
     Write-Host ""
     Write-Host "=== 2. Packaging iOS Release IPA (v$DisplayVersion) ===" -ForegroundColor Cyan
     if ($IsMacOS) {

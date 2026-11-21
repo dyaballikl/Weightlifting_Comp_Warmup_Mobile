@@ -104,6 +104,8 @@ public class WarmupStep
     public int Order { get; set; }
     public bool PreStep { get; set; }
     public bool IsOpener { get; set; }
+    public bool HasPresentationBuffer { get; set; }
+    public int PresentationBufferSeconds { get; set; }
 
     [JsonIgnore]
     public bool IsLift => Weight > 0 && !PreStep;
@@ -132,7 +134,9 @@ public class WarmupStep
         int totalLengthReverse,
         int order,
         bool preStep,
-        bool isOpener)
+        bool isOpener,
+        bool hasPresentationBuffer = false,
+        int presentationBufferSeconds = 0)
     {
         Action = action;
         Weight = weight;
@@ -142,6 +146,8 @@ public class WarmupStep
         Order = order;
         PreStep = preStep;
         IsOpener = isOpener;
+        HasPresentationBuffer = hasPresentationBuffer;
+        PresentationBufferSeconds = presentationBufferSeconds;
     }
 
     public WarmupStep Clone() => new(
@@ -152,7 +158,9 @@ public class WarmupStep
         TotalLengthReverse,
         Order,
         PreStep,
-        IsOpener);
+        IsOpener,
+        HasPresentationBuffer,
+        PresentationBufferSeconds);
 }
 
 /// <summary>

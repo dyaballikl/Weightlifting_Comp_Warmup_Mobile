@@ -5,7 +5,7 @@
 
   **Competition Olympic WeightLifting Warmup Timer & Plate Calculator for Android & iOS**
 
-  [![Version](https://img.shields.io/badge/version-2.0.45%20(build%2047)-38BDF8?style=flat-square)](./src/WeightliftingCompWarmup.Maui/WeightliftingCompWarmup.Maui.csproj)
+  [![Version](https://img.shields.io/badge/version-2.0.46%20(build%2049)-38BDF8?style=flat-square)](./src/WeightliftingCompWarmup.Maui/WeightliftingCompWarmup.Maui.csproj)
   [![Platform](https://img.shields.io/badge/platform-Android%20%7C%20iOS%20(.NET%2010%20MAUI)-4ADE80?style=flat-square)](./src/WeightliftingCompWarmup.Maui)
   [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-FBBF24?style=flat-square)](./LICENSE)
   [![100% Offline](https://img.shields.io/badge/offline-100%25%20local%20%26%20ad--free-A855F7?style=flat-square)](./PRIVACY.md)
@@ -20,7 +20,7 @@
 
 Enter your lifter's **Snatch** or **Clean & Jerk** opener, barbell type, weight-jump rules, and rest timing, and Comp OWL works backward from platform time to generate a complete, step-by-step warmup schedule with color-coded IWF barbell loading and live countdown clocks.
 
-- **Current Release:** `v2.0.45` (Build `47`)
+- **Current Release:** `v2.0.46` (Build `49`)
 - **Created by:** Matt Cunningham ([@lifting_while_diabetic](https://www.instagram.com/lifting_while_diabetic/) on Instagram)
 
 ---
@@ -46,10 +46,10 @@ Enter your lifter's **Snatch** or **Clean & Jerk** opener, barbell type, weight-
 ## Key Features
 
 ### 🏋️ Reverse-Calculated Warmup Progression
-- **Custom Jump & Rest Rules:** Configure two-tier weight jumps (e.g., normal jump below a threshold weight, smaller jump as you approach your opener) and rest intervals by weight bracket.
-- **Final-Jump Midpoint Smoothing:** Optional toggle to smooth the final two warmup jumps when the transition into your opener would otherwise be uneven.
+- **Custom Jump & Rest Rules:** Configure multi-tier weight jumps (whole kilograms) and rest intervals by weight bracket.
+- **Final-Jump Midpoint Smoothing:** Automatically smooths the final two warmup jumps when the gap into your opener would otherwise be uneven.
 - **Custom Pre-Warmup Items:** Insert foam rolling, dynamic mobility, empty bar work, or shoe/belt prep steps into the schedule so your entire back-room routine is timed from the first movement.
-- **Extra Buffer Before Opener:** Configurable buffer time (`90s` default) between your last warmup lift in the back room and walking out to the competition platform.
+- **Extra Buffer Before Opener:** Configurable buffer time (`60s` Snatch / `75s` Clean & Jerk default) between your last warmup lift in the back room and walking out to the competition platform.
 
 ### 🎨 Authentic IWF Barbell & Plate Graphics
 - **Color-Coded Competition Plates:** Vector-rendered barbell sleeves showing standard IWF bumper plates (`25 kg` red, `20 kg` blue, `15 kg` yellow, `10 kg` green), `2.5 kg` competition collars, and fractional change plates (`5 kg` down to `0.5 kg`) outside the collars.
@@ -58,17 +58,23 @@ Enter your lifter's **Snatch** or **Clean & Jerk** opener, barbell type, weight-
 
 ### ⏱️ Live Competition Countdown Modes
 - **Snatch LIVE Mode:**
-  - Tracks competition start time (optional), `10m` athlete presentation + `5m` post-presentation buffer, or direct stage-lift countdown (`N lifts out` from your opener).
-  - Quick-action buttons (`-1 Lift`, `+1 Lift`, `Reset Lift`, `+1m`, `+2m`) to react immediately when another lifter changes their opener or the jury pauses the clock.
+  - Tracks competition start time, `10m` athlete presentation & clock + `5m` presentation lift buffer (tagged directly in your schedule), and direct stage-lift countdown (`55s/lift` default).
+  - Quick competition-day controls: **⏭ Advance**, **+1m (2-Min Clock)** for consecutive self-follows, **↩️ Undo** (10-step history), inline **🎯 Opener Quick-Edit**, **Up Next** preview strip, final-10-second urgency highlight, and one-tap **→ Start C&J Break** transition banner once your Snatch opener arrives.
 - **Clean & Jerk LIVE Mode:**
-  - Seamless 3-phase countdown: **Snatch Attempts Remaining** (`90s/lift` default) → **Intermission Break After Snatch** (`10m` default) → **C&J Stage Lifts Out** (`60s/lift` default).
-- **Touch-Scrubbable Progress Bars:** Tap or drag directly on any active stage or break progress bar to scrub the clock forward or backward to match the venue's marshalling screen.
-- **Wake-Lock & Audio/Haptic Alerts:** Keeps your screen awake during live sessions and triggers a `750 Hz` tone + haptic vibration whenever the next warmup step arrives.
+  - Seamless 3-phase countdown: **Snatch Attempts Remaining** (`55s/lift` default) → **Intermission Break After Snatch** (`10m` default) → **C&J Stage Lifts Out** (`62s/lift` default).
+- **Touch-Scrubbable Progress Bars & Auto-Recovery:** Tap or drag directly on any active stage or break progress bar to scrub the clock forward or backward to match the venue's marshalling screen. Live sessions persist across backgrounding/process restarts and resume accurately using wall-clock catch-up.
+- **Wake-Lock, Floating Mini-Timer & Audio/Haptic Alerts:** Keeps your screen awake during live sessions, offers a draggable floating mini-timer overlay on Android, and triggers a `750 Hz` tone + haptic vibration whenever the next warmup step arrives.
+
+### 📷 AI Scoreboard Scanner (Beta)
+- **Instant Lifts Out & Lifts Passed:** Snap or pick a photo of the competition scoreboard TV/monitor to extract lifters, completed lifts, and declared attempts for both Snatch and Clean & Jerk via your own free Google AI Studio Gemini API key.
+- **IWF Call-Order Engine & 2-Min Self-Follow Detection:** Replays completed lifts from Lift #1, applies IWF tie-breakers (Weight → Attempt # → Previous Attempt Sequence → Lot/Seed #), flags projected 2-minute self-follow clocks (`⏱ 2-MIN`), and lets you exclude prior-session rows or edit any cell.
+- **Encrypted Key Storage:** API keys are stored encrypted on-device via SecureStorage (Android Keystore / iOS Keychain), sent only via the `x-goog-api-key` header, and excluded from cloud backups and profile exports.
 
 ### 📱 Built for the Warmup Room
+- **Unified Settings, Help & About Menu (`☰`):** Clean 4-button top header with Theme (`Auto` / `Dark` / `Light`), Audio, Gemini API Key management + connection test, Android Floating Timer permission status, JSON Backup/Restore, and full Help & About documentation in one place.
 - **Adaptive Phone & Tablet Layout:** Automatically switches between a compact tabbed phone interface (`< 760dp`) and a 2-column split dashboard on tablets and iPads (`>= 760dp`).
-- **Multi-Lifter Profiles:** Save, duplicate, rename, and switch between multiple athlete profiles on the same device.
-- **100% Offline & Private:** Zero internet connection required—ideal for basement venues and warmup halls with poor cell reception.
+- **Multi-Lifter Profiles & Atomic Storage:** Save, duplicate, rename, export/import, and switch between multiple athlete profiles on the same device with atomic `.bak` crash-safe JSON persistence.
+- **100% Offline Core & Private:** All core warmup calculation, plate loading, and live timer features run completely offline with zero analytics or ads.
 
 > [!IMPORTANT]
 > **Competition Day Reminder:** Comp OWL is **not** connected to the competition's electronic refereeing or marshalling software. Always keep an eye on the official warmup room scoreboard—other athletes changing their attempts, 2-minute self-follow clocks, or jury pauses can rapidly move your platform time forward or back.
@@ -86,7 +92,8 @@ Enter your lifter's **Snatch** or **Clean & Jerk** opener, barbell type, weight-
   - [`Services/ProfileStorageService.cs`](./src/WeightliftingCompWarmup.Core/Services/ProfileStorageService.cs) — Local JSON persistence for athlete profiles.
 - `src/WeightliftingCompWarmup.Maui/` — Cross-platform `.NET 10 MAUI` mobile & tablet app:
   - [`Views/MainPage.cs`](./src/WeightliftingCompWarmup.Maui/Views/MainPage.cs) — Adaptive responsive UI switching between a **2-Column Split Dashboard** on Tablets/iPads and a **Segmented Compact Layout** on Phones.
-  - [`Views/HelpAboutModalPage.cs`](./src/WeightliftingCompWarmup.Maui/Views/HelpAboutModalPage.cs) — Tabbed **How to Use (Help)** and **About Comp OWL** modal (`❓` button in the header bar).
+  - [`Views/HelpAboutModalPage.cs`](./src/WeightliftingCompWarmup.Maui/Views/HelpAboutModalPage.cs) — Unified 3-tab **Settings**, **How to Use (Help)**, and **About Comp OWL** modal (`☰` menu button in the header bar).
+  - [`Views/ScoreboardScannerModalPage.cs`](./src/WeightliftingCompWarmup.Maui/Views/ScoreboardScannerModalPage.cs) — Optional **AI Scoreboard Scanner (Beta)** modal with Gemini Vision integration, interactive attempt editing, prior-session row exclusion, and IWF call-order timeline.
   - [`Controls/BarbellPlateView.cs`](./src/WeightliftingCompWarmup.Maui/Controls/BarbellPlateView.cs) — Custom `GraphicsView` + `IDrawable` renderer for full two-sided opener barbells and compact single-sleeve lift rows.
   - [`Controls/ScrubbableProgressBar.cs`](./src/WeightliftingCompWarmup.Maui/Controls/ScrubbableProgressBar.cs) — Touch-scrubbable progress bar for live clock adjustments.
   - [`Services/DevicePlatformService.cs`](./src/WeightliftingCompWarmup.Maui/Services/DevicePlatformService.cs) — Screen wake-lock (`DeviceDisplay.Current.KeepScreenOn`) and `750 Hz` step transition audio + haptic alert.

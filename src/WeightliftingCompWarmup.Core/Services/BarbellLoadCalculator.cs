@@ -178,17 +178,27 @@ public static class BarbellLoadCalculator
             return $"Bar ({barWeightKg}kg)";
         }
 
-        var grouped = rawPlates
+        var insideCollar = rawPlates
+            .Where(p => p >= 2.5m)
             .GroupBy(p => p)
             .OrderByDescending(g => g.Key)
             .Select(g => g.Count() > 1 ? $"{g.Count()}×{g.Key:0.#}" : $"{g.Key:0.#}")
             .ToList();
 
+        var outsideCollar = rawPlates
+            .Where(p => p < 2.5m)
+            .GroupBy(p => p)
+            .OrderByDescending(g => g.Key)
+            .Select(g => g.Count() > 1 ? $"{g.Count()}×{g.Key:0.#}" : $"{g.Key:0.#}")
+            .ToList();
+
+        var parts = new List<string>(insideCollar);
         if (useCompCollars)
         {
-            grouped.Add("Collar (2.5)");
+            parts.Add("Collar (2.5)");
         }
+        parts.AddRange(outsideCollar);
 
-        return $"Per side: {string.Join(" + ", grouped)}";
+        return $"Per side: {string.Join(" + ", parts)}";
     }
 }

@@ -75,6 +75,13 @@ public class MainViewModel : INotifyPropertyChanged
     private bool _isCheckingForUpdate;
     private int _pendingScannedSnatchLiftsPassed;
     private int _pendingScannedCjLiftsPassed;
+    private bool _canUndoLiveAction;
+    private bool _canAddOneMinuteBonus = true;
+    private string _nextUndoActionLabel = string.Empty;
+    private bool _isStageFinalTenSeconds;
+    private string _liveNextStepText = string.Empty;
+    private bool _showTransitionToCjBreakBanner;
+    private CancellationTokenSource? _statusBannerCts;
 
     private ObservableCollection<SetupStepItemViewModel> _previewSteps = new();
     private ObservableCollection<ExtraItem> _extrasList = new();
@@ -148,6 +155,19 @@ public class MainViewModel : INotifyPropertyChanged
         set => SetThemePreference(value);
     }
 
+    public bool ReplaceAutoOneKgAfterMake
+    {
+        get => _storageService.ReplaceAutoOneKgAfterMake;
+        set
+        {
+            if (_storageService.ReplaceAutoOneKgAfterMake != value)
+            {
+                _storageService.SetReplaceAutoOneKgAfterMake(value);
+                OnPropertyChanged();
+            }
+        }
+    }
+
     public void SetThemePreference(string? preference)
     {
         var normalized = ProfileStorageService.NormalizeThemePreference(preference);
@@ -185,7 +205,7 @@ public class MainViewModel : INotifyPropertyChanged
         {
             if (_selectedLiftType != value)
             {
-                StopLiveTimer();
+                StopLiveTimer(clearPersistedState: !_isLiveMode);
                 _selectedLiftType = value;
                 RefreshDisciplineProperties();
                 if (_isLiveMode)
@@ -197,6 +217,7 @@ public class MainViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(IsSnatchSelected));
                 OnPropertyChanged(nameof(IsCjSelected));
                 OnPropertyChanged(nameof(CurrentLiftTitle));
+                OnPropertyChanged(nameof(ShowTransitionToCjBreakBanner));
             }
         }
     }
@@ -219,12 +240,13 @@ public class MainViewModel : INotifyPropertyChanged
                 }
                 else
                 {
-                    StopLiveTimer();
+                    StopLiveTimer(clearPersistedState: true);
                     RefreshSetupCalculations();
                 }
 
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsSetupMode));
+                OnPropertyChanged(nameof(ShowTransitionToCjBreakBanner));
             }
         }
     }
@@ -254,6 +276,11 @@ public class MainViewModel : INotifyPropertyChanged
         get => _statusBannerText;
         set
         {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                _statusBannerCts?.Cancel();
+            }
+
             if (_statusBannerText != value)
             {
                 _statusBannerText = value;
@@ -819,8 +846,100 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public string NextLiftButtonColorHex => IsNextLiftHighlighted ? "#16A34A" : "#334155";
+    public bool IsStageFinalTenSeconds
+    {
+        get => _isStageFinalTenSeconds;
+        private set
+        {
+            if (_isStageFinalTenSeconds != value)
+            {
+                _isStageFinalTenSeconds = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(NextLiftButtonColorHex));
+                OnPropertyChanged(nameof(NextLiftButtonColor));
+            }
+        }
+    }
+
+    public string NextLiftButtonColorHex => IsNextLiftHighlighted
+        ? (IsStageFinalTenSeconds ? "#DC2626" : "#16A34A")
+        : "#334155";
     public Color NextLiftButtonColor => Color.FromArgb(NextLiftButtonColorHex);
+
+    public bool CanUndoLiveAction
+    {
+        get => _canUndoLiveAction;
+        private set
+        {
+            if (_canUndoLiveAction != value)
+            {
+                _canUndoLiveAction = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(LiveUndoButtonText));
+            }
+        }
+    }
+
+    public string NextUndoActionLabel
+    {
+        get => _nextUndoActionLabel;
+        private set
+        {
+            if (_nextUndoActionLabel != value)
+            {
+                _nextUndoActionLabel = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(LiveUndoButtonText));
+            }
+        }
+    }
+
+    public bool CanAddOneMinuteBonus
+    {
+        get => _canAddOneMinuteBonus;
+        private set
+        {
+            if (_canAddOneMinuteBonus != value)
+            {
+                _canAddOneMinuteBonus = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string LiveUndoButtonText =>
+        CanUndoLiveAction && !string.IsNullOrWhiteSpace(_nextUndoActionLabel)
+            ? $"↩️ Undo: {_nextUndoActionLabel}"
+            : "↩️ Undo";
+
+    public string LiveNextStepText
+    {
+        get => _liveNextStepText;
+        private set
+        {
+            if (_liveNextStepText != value)
+            {
+                _liveNextStepText = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasLiveNextStep));
+            }
+        }
+    }
+
+    public bool HasLiveNextStep => !string.IsNullOrWhiteSpace(_liveNextStepText);
+
+    public bool ShowTransitionToCjBreakBanner
+    {
+        get => _showTransitionToCjBreakBanner && _isLiveMode && IsSnatchSelected;
+        private set
+        {
+            if (_showTransitionToCjBreakBanner != value)
+            {
+                _showTransitionToCjBreakBanner = value;
+                OnPropertyChanged();
+            }
+        }
+    }
 
     public int LiveCjSnatchLiftsOut
     {
@@ -886,7 +1005,7 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public string BreakFillColorHex => IsBreakActive ? "#EAB308" : "#0284C7";
+    public string BreakFillColorHex => IsBreakActive ? "#D97706" : "#0284C7";
 
     // Phone C&J Collapsible Phase State (Phase 1: Snatch Left, Phase 2: Break)
     public bool IsCjSnatchPhaseCompleted => _isCjSnatchPhaseCompleted;
@@ -972,6 +1091,9 @@ public class MainViewModel : INotifyPropertyChanged
     // Live Runner Commands
     public ICommand ToggleLiveTimerCommand { get; }
     public ICommand ResetLiveSessionCommand { get; }
+    public ICommand UndoLiveActionCommand { get; }
+    public ICommand AddOneMinuteCurrentStageLiftCommand { get; }
+    public ICommand TransitionToCjBreakCommand { get; }
     public ICommand AdvanceStageLiftCommand { get; }
     public ICommand AdvanceCjSnatchLiftCommand { get; }
     public ICommand AdvanceActiveLivePhaseCommand { get; }
@@ -1113,8 +1235,12 @@ public class MainViewModel : INotifyPropertyChanged
             {
                 _pendingScannedCjLiftsPassed = 0;
             }
+            _storageService.ClearLiveSessionState();
             InitializeLiveSession(autoStart: IsLiveTimerRunning);
         });
+        UndoLiveActionCommand = new Command(ExecuteUndoLiveAction);
+        AddOneMinuteCurrentStageLiftCommand = new Command(ExecuteAddOneMinuteCurrentStageLift);
+        TransitionToCjBreakCommand = new Command(ExecuteTransitionToCjBreak);
         AdvanceStageLiftCommand = new Command(ExecuteAdvanceStageLift);
         AdvanceCjSnatchLiftCommand = new Command(ExecuteAdvanceCjSnatchLift);
         AdvanceActiveLivePhaseCommand = new Command(ExecuteAdvanceActiveLivePhase);
@@ -1130,6 +1256,7 @@ public class MainViewModel : INotifyPropertyChanged
         _platformService.OverlayAdvanceRequested += ExecuteAdvanceActiveLivePhase;
 
         RefreshAllFromActiveProfile();
+        TryRestoreLiveSessionOnStartup();
     }
 
     public void RefreshAllFromActiveProfile()
@@ -1578,6 +1705,7 @@ public class MainViewModel : INotifyPropertyChanged
         {
             AppThemeManager.SetPreference(_storageService.ThemePreference);
             OnPropertyChanged(nameof(ThemePreference));
+            OnPropertyChanged(nameof(ReplaceAutoOneKgAfterMake));
             RefreshAllFromActiveProfile();
             RefreshLiveStepsTheme();
             ShowBanner($"Imported {result.ImportedCount} profile(s). Active: '{ActiveProfile.Name}'.");
@@ -1588,10 +1716,11 @@ public class MainViewModel : INotifyPropertyChanged
 
     public void ResetAllSettingsToDemo()
     {
-        StopLiveTimer();
+        StopLiveTimer(clearPersistedState: true);
         _storageService.ResetAllSettings();
         AppThemeManager.SetPreference(_storageService.ThemePreference);
         OnPropertyChanged(nameof(ThemePreference));
+        OnPropertyChanged(nameof(ReplaceAutoOneKgAfterMake));
         RefreshAllFromActiveProfile();
         RefreshLiveStepsTheme();
         ShowBanner("Cleared all settings and restored 'Demo Profile'.");
@@ -1629,6 +1758,66 @@ public class MainViewModel : INotifyPropertyChanged
         var snapshot = _liveSession.GetSnapshot(DateTime.Now);
         RebuildLiveStepItemsFromSnapshot(snapshot);
         ApplyLiveSnapshot(snapshot);
+        PersistLiveSessionIfActive();
+    }
+
+    public void PersistLiveSessionIfActive()
+    {
+        if (_isLiveMode && _liveSession != null)
+        {
+            _storageService.SaveLiveSessionState(
+                _liveSession.ExportPersistedState(ActiveProfile.Name, DateTime.UtcNow));
+        }
+    }
+
+    private void TryRestoreLiveSessionOnStartup()
+    {
+        var saved = _storageService.LoadLiveSessionState(DateTime.UtcNow);
+        if (saved == null)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(saved.ProfileName) &&
+            !string.Equals(saved.ProfileName, ActiveProfile.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            var matched = _storageService.Profiles.FirstOrDefault(p =>
+                string.Equals(p.Name, saved.ProfileName, StringComparison.OrdinalIgnoreCase));
+            if (matched != null)
+            {
+                _storageService.SelectProfile(matched.Name);
+                RefreshAllFromActiveProfile();
+            }
+        }
+
+        _selectedLiftType = saved.LiftType;
+        _liveAutoAdvance = saved.AutoAdvance;
+        _isLiveMode = true;
+
+        _liveSession = new LiveWarmupSession(_selectedLiftType, ActiveProfile);
+        var snapshot = _liveSession.RestorePersistedState(saved, DateTime.Now, DateTime.UtcNow);
+
+        _isCjSnatchManuallyExpanded = false;
+        _isCjBreakManuallyExpanded = false;
+
+        IsLiveTimerRunning = _liveSession.IsRunning;
+        _lastTimerTickUtc = _liveSession.IsRunning ? DateTime.UtcNow : default;
+        _platformService.SetLiveMiniTimerEnabled(_liveSession.IsRunning && _isLiveMode);
+
+        RebuildLiveStepItemsFromSnapshot(snapshot);
+        ApplyLiveSnapshot(snapshot);
+
+        OnPropertyChanged(nameof(SelectedLiftType));
+        OnPropertyChanged(nameof(IsSnatchSelected));
+        OnPropertyChanged(nameof(IsCjSelected));
+        OnPropertyChanged(nameof(CurrentLiftTitle));
+        OnPropertyChanged(nameof(IsLiveMode));
+        OnPropertyChanged(nameof(IsSetupMode));
+        OnPropertyChanged(nameof(LiveAutoAdvance));
+        OnPropertyChanged(nameof(OpenerWeight));
+
+        string liftName = _selectedLiftType == LiftType.Snatch ? "Snatch" : "Clean & Jerk";
+        ShowBanner($"Restored your active {liftName} Live warmup timer.");
     }
 
     private void RebuildLiveStepItemsFromSnapshot(LiveSessionSnapshot snapshot)
@@ -1702,6 +1891,7 @@ public class MainViewModel : INotifyPropertyChanged
             }
             RebuildLiveStepItemsFromSnapshot(snapshot);
             ApplyLiveSnapshot(snapshot);
+            PersistLiveSessionIfActive();
         }
     }
 
@@ -1816,6 +2006,7 @@ public class MainViewModel : INotifyPropertyChanged
                         RebuildLiveStepItemsFromSnapshot(snapshot);
                     }
                     ApplyLiveSnapshot(snapshot);
+                    PersistLiveSessionIfActive();
                 }
             }
         }
@@ -1835,7 +2026,7 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public void StopLiveTimer()
+    public void StopLiveTimer(bool clearPersistedState = false)
     {
         if (_liveSession != null)
         {
@@ -1844,6 +2035,11 @@ public class MainViewModel : INotifyPropertyChanged
         IsLiveTimerRunning = false;
         _lastTimerTickUtc = default;
         _platformService.SetLiveMiniTimerEnabled(false);
+
+        if (clearPersistedState)
+        {
+            _storageService.ClearLiveSessionState();
+        }
     }
 
     private void ExecuteToggleLiveTimer()
@@ -1857,6 +2053,7 @@ public class MainViewModel : INotifyPropertyChanged
         IsLiveTimerRunning = !IsLiveTimerRunning;
         _liveSession.IsRunning = IsLiveTimerRunning;
         ApplyLiveSnapshot(_liveSession.GetSnapshot(DateTime.Now));
+        PersistLiveSessionIfActive();
     }
 
     public void RefreshClockFormat()
@@ -1869,6 +2066,8 @@ public class MainViewModel : INotifyPropertyChanged
 
     /// <summary>
     /// Called every 1 second by the UI dispatcher timer while the view is active or in floating mini-timer mode.
+    /// Uses an accumulated UTC baseline (preventing slow fractional timer drift) and stepped local timestamps
+    /// during multi-second catch-up (so crossing Competition Start while backgrounded never over-advances the presentation clock).
     /// </summary>
     public void OnTimerTick()
     {
@@ -1878,24 +2077,46 @@ public class MainViewModel : INotifyPropertyChanged
         }
 
         DateTime nowUtc = DateTime.UtcNow;
-        int ticksToRun = 1;
-        if (_lastTimerTickUtc != default)
+        int ticksToRun;
+        if (_lastTimerTickUtc == default)
+        {
+            ticksToRun = 1;
+            _lastTimerTickUtc = nowUtc;
+        }
+        else
         {
             double elapsedSeconds = (nowUtc - _lastTimerTickUtc).TotalSeconds;
+            if (elapsedSeconds < 0.85)
+            {
+                return;
+            }
+
             if (elapsedSeconds >= 1.75)
             {
-                ticksToRun = Math.Clamp((int)Math.Round(elapsedSeconds), 1, 3600);
+                ticksToRun = Math.Clamp((int)Math.Floor(elapsedSeconds), 1, 3600);
+                _lastTimerTickUtc = _lastTimerTickUtc.AddSeconds(ticksToRun);
+                if ((nowUtc - _lastTimerTickUtc).TotalSeconds > 5.0)
+                {
+                    _lastTimerTickUtc = nowUtc;
+                }
+            }
+            else
+            {
+                ticksToRun = 1;
+                // Advance baseline by 1.0s instead of snapping to nowUtc so sub-second timer jitter accumulates cleanly
+                _lastTimerTickUtc = _lastTimerTickUtc.AddSeconds(1);
             }
         }
-        _lastTimerTickUtc = nowUtc;
 
         DateTime localNow = DateTime.Now;
-        LiveSessionSnapshot snapshot = _liveSession.Tick(localNow);
+        DateTime firstStepLocal = ticksToRun > 1 ? localNow.AddSeconds(-(ticksToRun - 1)) : localNow;
+        LiveSessionSnapshot snapshot = _liveSession.Tick(firstStepLocal);
         bool triggerBeep = snapshot.TriggerBeep;
 
         for (int i = 1; i < ticksToRun; i++)
         {
-            snapshot = _liveSession.Tick(localNow);
+            DateTime steppedLocal = localNow.AddSeconds(-(ticksToRun - 1 - i));
+            snapshot = _liveSession.Tick(steppedLocal);
             triggerBeep |= snapshot.TriggerBeep;
         }
 
@@ -1916,6 +2137,71 @@ public class MainViewModel : INotifyPropertyChanged
 
         var snapshot = _liveSession.AdvanceStageLift(DateTime.Now);
         ApplyLiveSnapshot(snapshot);
+        PersistLiveSessionIfActive();
+    }
+
+    private void ExecuteUndoLiveAction()
+    {
+        if (_liveSession == null || !_liveSession.CanUndo)
+        {
+            return;
+        }
+
+        int openerBefore = _liveSession.CurrentOpenerWeightKg;
+        var snapshot = _liveSession.Undo(DateTime.Now);
+
+        if (_liveSession.CurrentOpenerWeightKg != openerBefore)
+        {
+            if (_liveSession.LiftType == LiftType.Snatch)
+            {
+                ActiveProfile.SnatchOpenerWeight = _liveSession.CurrentOpenerWeightKg;
+            }
+            else
+            {
+                ActiveProfile.CjOpenerWeight = _liveSession.CurrentOpenerWeightKg;
+            }
+
+            _storageService.Save();
+            OnPropertyChanged(nameof(OpenerWeight));
+            RefreshSetupCalculations();
+            RebuildLiveStepItemsFromSnapshot(snapshot);
+        }
+
+        ApplyLiveSnapshot(snapshot);
+        PersistLiveSessionIfActive();
+    }
+
+    private void ExecuteAddOneMinuteCurrentStageLift()
+    {
+        if (_liveSession == null)
+        {
+            return;
+        }
+
+        var snapshot = _liveSession.AddCurrentStageLiftBonusSeconds(60, DateTime.Now);
+        ApplyLiveSnapshot(snapshot);
+        PersistLiveSessionIfActive();
+    }
+
+    private void ExecuteTransitionToCjBreak()
+    {
+        ActiveProfile.CjSnatchLiftsOut = 0;
+        _pendingScannedCjLiftsPassed = 0;
+        _storageService.Save();
+        OnPropertyChanged(nameof(CjSnatchAttemptsRemaining));
+
+        _selectedLiftType = LiftType.CleanAndJerk;
+        OnPropertyChanged(nameof(SelectedLiftType));
+        OnPropertyChanged(nameof(IsSnatchSelected));
+        OnPropertyChanged(nameof(IsCjSelected));
+        OnPropertyChanged(nameof(CurrentLiftTitle));
+        RefreshDisciplineProperties();
+
+        _isLiveMode = true;
+        InitializeLiveSession(autoStart: true);
+        OnPropertyChanged(nameof(IsLiveMode));
+        OnPropertyChanged(nameof(IsSetupMode));
+        ShowBanner("Switched to Clean & Jerk LIVE — Break clock running.");
     }
 
     private void ExecuteAdvanceCjSnatchLift()
@@ -1927,6 +2213,7 @@ public class MainViewModel : INotifyPropertyChanged
 
         var snapshot = _liveSession.AdvanceCjSnatchLift(DateTime.Now);
         ApplyLiveSnapshot(snapshot);
+        PersistLiveSessionIfActive();
     }
 
     private void ExecuteAdvanceActiveLivePhase()
@@ -1955,6 +2242,7 @@ public class MainViewModel : INotifyPropertyChanged
 
         var snapshot = _liveSession.SetLiftsOut(_liveSession.LiftsOut + delta, DateTime.Now);
         ApplyLiveSnapshot(snapshot);
+        PersistLiveSessionIfActive();
     }
 
     private void ExecuteAdjustLiveCjSnatchLiftsOut(string? deltaStr)
@@ -1966,6 +2254,7 @@ public class MainViewModel : INotifyPropertyChanged
 
         var snapshot = _liveSession.SetCjSnatchLiftsOut(_liveSession.CjSnatchLiftsOut + delta, DateTime.Now);
         ApplyLiveSnapshot(snapshot);
+        PersistLiveSessionIfActive();
     }
 
     private void ExecuteScrubStageProgress(double fraction)
@@ -1977,6 +2266,7 @@ public class MainViewModel : INotifyPropertyChanged
 
         var snapshot = _liveSession.ScrubStageLiftProgress(fraction, DateTime.Now);
         ApplyLiveSnapshot(snapshot);
+        PersistLiveSessionIfActive();
     }
 
     private void ExecuteScrubCjSnatchProgress(double fraction)
@@ -1988,6 +2278,7 @@ public class MainViewModel : INotifyPropertyChanged
 
         var snapshot = _liveSession.ScrubCjSnatchProgress(fraction, DateTime.Now);
         ApplyLiveSnapshot(snapshot);
+        PersistLiveSessionIfActive();
     }
 
     private void ExecuteScrubCjBreakProgress(double fraction)
@@ -1999,6 +2290,7 @@ public class MainViewModel : INotifyPropertyChanged
 
         var snapshot = _liveSession.ScrubCjBreakProgress(fraction, DateTime.Now);
         ApplyLiveSnapshot(snapshot);
+        PersistLiveSessionIfActive();
     }
 
     private void ExecuteForceStartStageNow()
@@ -2010,6 +2302,7 @@ public class MainViewModel : INotifyPropertyChanged
 
         var snapshot = _liveSession.ForceStartStageNow(DateTime.Now);
         ApplyLiveSnapshot(snapshot);
+        PersistLiveSessionIfActive();
     }
 
     private void ExecuteToggleCjSnatchExpanded()
@@ -2052,6 +2345,7 @@ public class MainViewModel : INotifyPropertyChanged
 
         var snapshot = _liveSession.SetCjBreakRemainingSeconds(remainingSeconds, DateTime.Now);
         ApplyLiveSnapshot(snapshot);
+        PersistLiveSessionIfActive();
     }
 
     public void SetCustomLiveLiftsOut(int liftsOut)
@@ -2063,6 +2357,7 @@ public class MainViewModel : INotifyPropertyChanged
 
         var snapshot = _liveSession.SetLiftsOut(liftsOut, DateTime.Now);
         ApplyLiveSnapshot(snapshot);
+        PersistLiveSessionIfActive();
     }
 
     private void ApplyLiveSnapshot(LiveSessionSnapshot snapshot)
@@ -2079,6 +2374,11 @@ public class MainViewModel : INotifyPropertyChanged
         LiveStageProgress = snapshot.StageLiftProgress;
         LiveStageStatusText = snapshot.StageLiftStatusText;
         IsNextLiftHighlighted = snapshot.IsNextLiftHighlighted;
+        IsStageFinalTenSeconds = snapshot.IsStageFinalTenSeconds;
+        CanUndoLiveAction = snapshot.CanUndo;
+        CanAddOneMinuteBonus = snapshot.CurrentStageLiftBonusSeconds < 300;
+        NextUndoActionLabel = snapshot.NextUndoActionLabel;
+        LiveNextStepText = snapshot.NextStepPreviewText;
 
         LiveCjSnatchLiftsOut = snapshot.CjSnatchLiftsOut;
         LiveCjSnatchProgress = snapshot.CjSnatchStageProgress;
@@ -2096,19 +2396,35 @@ public class MainViewModel : INotifyPropertyChanged
             : snapshot.CjSnatchLiftsOut <= 0;
         bool breakCompletedNow = snatchCompletedNow && snapshot.CjBreakRemainingSeconds <= 0;
 
-        if (snatchCompletedNow != _isCjSnatchPhaseCompleted || !snatchCompletedNow)
+        bool phaseFlagsChanged = false;
+        if (snatchCompletedNow != _isCjSnatchPhaseCompleted)
         {
             _isCjSnatchPhaseCompleted = snatchCompletedNow;
             _isCjSnatchManuallyExpanded = false;
+            phaseFlagsChanged = true;
+        }
+        else if (!snatchCompletedNow && _isCjSnatchManuallyExpanded)
+        {
+            _isCjSnatchManuallyExpanded = false;
+            phaseFlagsChanged = true;
         }
 
-        if (breakCompletedNow != _isCjBreakPhaseCompleted || !breakCompletedNow)
+        if (breakCompletedNow != _isCjBreakPhaseCompleted)
         {
             _isCjBreakPhaseCompleted = breakCompletedNow;
             _isCjBreakManuallyExpanded = false;
+            phaseFlagsChanged = true;
+        }
+        else if (!breakCompletedNow && _isCjBreakManuallyExpanded)
+        {
+            _isCjBreakManuallyExpanded = false;
+            phaseFlagsChanged = true;
         }
 
-        NotifyCjPhaseExpansionChanged();
+        if (phaseFlagsChanged)
+        {
+            NotifyCjPhaseExpansionChanged();
+        }
 
         foreach (var stepSnap in snapshot.Steps)
         {
@@ -2211,6 +2527,7 @@ public class MainViewModel : INotifyPropertyChanged
         LiveMiniAdvanceButtonText = advanceBtnText;
 
         bool isWarmupCompleted = snapshot.SecondsToOpen <= 0 || (activeStep?.IsOpener == true);
+        ShowTransitionToCjBreakBanner = snapshot.LiftType == LiftType.Snatch && isWarmupCompleted;
 
         _platformService.UpdateLiveMiniTimerFrame(
             LiveActiveStepDescription,
@@ -2229,9 +2546,42 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    private void ShowBanner(string message)
+    private void ShowBanner(string message, int autoDismissSeconds = 10)
     {
+        _statusBannerCts?.Cancel();
+        _statusBannerCts?.Dispose();
+        _statusBannerCts = null;
+
         StatusBannerText = message;
+
+        if (!string.IsNullOrWhiteSpace(message) && autoDismissSeconds > 0)
+        {
+            var cts = new CancellationTokenSource();
+            _statusBannerCts = cts;
+            var token = cts.Token;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(autoDismissSeconds), token);
+                    if (!token.IsCancellationRequested)
+                    {
+                        MainThread.BeginInvokeOnMainThread(() =>
+                        {
+                            if (!token.IsCancellationRequested && StatusBannerText == message)
+                            {
+                                StatusBannerText = string.Empty;
+                            }
+                        });
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Replaced by a newer banner or manually dismissed
+                }
+            }, token);
+        }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

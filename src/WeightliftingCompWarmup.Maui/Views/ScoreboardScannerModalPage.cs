@@ -68,7 +68,7 @@ public class ScoreboardScannerModalPage : ContentPage
     private int? _snatchOpenerOverrideKg;
     private int? _cjOpenerOverrideKg;
     private bool _overrideAutoPlusOne = true;
-    private bool _isApiKeyExpanded;
+    private bool _lastKnownHasApiKey;
     private bool _isExcludeListExpanded;
     private bool _isAnalyzing;
     private string _statusMessage = string.Empty;
@@ -108,9 +108,10 @@ public class ScoreboardScannerModalPage : ContentPage
         Title = "AI Scoreboard Scanner (Beta)";
         NavigationPage.SetHasNavigationBar(this, false);
 
-        _isApiKeyExpanded = !_visionService.HasApiKey();
+        _lastKnownHasApiKey = _visionService.HasApiKey();
 
         RestoreStateFromSessionCache();
+        _overrideAutoPlusOne = _viewModel.ReplaceAutoOneKgAfterMake;
         if (_lifterRows.Count > 0)
         {
             RecalculateScoreboard();
@@ -170,20 +171,73 @@ public class ScoreboardScannerModalPage : ContentPage
     {
         base.OnAppearing();
         AppThemeManager.ThemeChanged += OnThemeChanged;
+
+        // Refresh if the user configured/cleared their Gemini API key or changed defaults in Settings
+        bool hasKeyNow = _visionService.HasApiKey();
+        bool settingAutoPlusOne = _viewModel.ReplaceAutoOneKgAfterMake;
+        if (hasKeyNow != _lastKnownHasApiKey || settingAutoPlusOne != _overrideAutoPlusOne)
+        {
+            _lastKnownHasApiKey = hasKeyNow;
+            _overrideAutoPlusOne = settingAutoPlusOne;
+            if (_lifterRows.Count > 0)
+            {
+                RecalculateScoreboard();
+            }
+            BuildLayout();
+        }
+
         RestoreScrollPositionAsync(_lastScrollY);
     }
 
     protected override void OnDisappearing()
     {
         AppThemeManager.ThemeChanged -= OnThemeChanged;
-        _scanCts?.Cancel();
         SaveStateToSessionCache();
         base.OnDisappearing();
     }
 
+    protected override bool OnBackButtonPressed()
+    {
+        if (_isPhotoExpanded)
+        {
+            _isPhotoExpanded = false;
+            UpdateExpandedPhotoOverlayInPlace();
+            return true;
+        }
+
+        _scanCts?.Cancel();
+        SaveStateToSessionCache();
+        return base.OnBackButtonPressed();
+    }
+
+    private async Task CloseModalAsync()
+    {
+        _scanCts?.Cancel();
+        SaveStateToSessionCache();
+        if (Navigation.ModalStack.Count > 0)
+        {
+            await Navigation.PopModalAsync();
+        }
+    }
+
+    private async Task OpenSettingsForApiKeyAsync()
+    {
+        SaveStateToSessionCache();
+        await Navigation.PushModalAsync(
+            new HelpAboutModalPage(AppMenuTab.Settings, _viewModel),
+            animated: true);
+    }
+
     private void OnThemeChanged()
     {
-        MainThread.BeginInvokeOnMainThread(BuildLayout);
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            // Force full rebuild so Header Bar and Bottom Bar also re-theme cleanly
+            _outerGrid = null;
+            _mainScrollView = null;
+            _overlayHost = null;
+            BuildLayout();
+        });
     }
 
     private void RestoreScrollPositionAsync(double targetScrollY)
@@ -409,8 +463,8 @@ public class ScoreboardScannerModalPage : ContentPage
         });
         titleRow.Children.Add(new Border
         {
-            BackgroundColor = Color.FromArgb("#451A03"),
-            Stroke = Color.FromArgb("#F59E0B"),
+            BackgroundColor = AppThemeManager.Color("#451A03"),
+            Stroke = AppThemeManager.Color("#F59E0B"),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 5 },
             Padding = new Thickness(6, 1),
@@ -420,7 +474,7 @@ public class ScoreboardScannerModalPage : ContentPage
                 Text = "BETA",
                 FontSize = 9.5,
                 FontAttributes = FontAttributes.Bold,
-                TextColor = Color.FromArgb("#FBBF24"),
+                TextColor = AppThemeManager.Color("#FBBF24"),
                 VerticalOptions = LayoutOptions.Center
             }
         });
@@ -438,19 +492,15 @@ public class ScoreboardScannerModalPage : ContentPage
             Text = "✕",
             FontSize = 14,
             FontAttributes = FontAttributes.Bold,
-            BackgroundColor = AppThemeManager.Color("#334155"),
-            TextColor = AppThemeManager.Color("#F8FAFC"),
+            BackgroundColor = AppThemeManager.NeutralButtonBackground,
+            TextColor = AppThemeManager.NeutralButtonText,
             CornerRadius = 8,
             WidthRequest = 36,
             HeightRequest = 36,
             Padding = Thickness.Zero,
             VerticalOptions = LayoutOptions.Center
         };
-        closeBtn.Clicked += async (_, _) =>
-        {
-            SaveStateToSessionCache();
-            await Navigation.PopModalAsync();
-        };
+        closeBtn.Clicked += async (_, _) => await CloseModalAsync();
 
         grid.Add(titleStack, 0, 0);
         grid.Add(closeBtn, 1, 0);
@@ -461,231 +511,114 @@ public class ScoreboardScannerModalPage : ContentPage
     private View BuildApiKeyCard()
     {
         bool hasKey = _visionService.HasApiKey();
-        string badgeText = hasKey ? $"🔑 Key Ready ({_visionService.GetMaskedApiKey()})" : "⚠️ Free Gemini API Key Required";
-        string badgeColorHex = hasKey ? "#16A34A" : "#D97706";
+        _lastKnownHasApiKey = hasKey;
 
-        var card = new Border
+        // When a key is already configured, keep this as a super compact 1-row bar so Take/Pick Photo stays at the top
+        if (hasKey)
+        {
+            var compactCard = new Border
+            {
+                BackgroundColor = AppThemeManager.Color("#1E293B"),
+                Stroke = AppThemeManager.Color("#334155"),
+                StrokeThickness = 1,
+                StrokeShape = new RoundRectangle { CornerRadius = 10 },
+                Padding = new Thickness(12, 8)
+            };
+
+            var row = new Grid
+            {
+                ColumnDefinitions =
+                {
+                    new ColumnDefinition { Width = GridLength.Star },
+                    new ColumnDefinition { Width = GridLength.Auto }
+                },
+                ColumnSpacing = 8
+            };
+
+            row.Add(new VerticalStackLayout
+            {
+                Spacing = 1,
+                VerticalOptions = LayoutOptions.Center,
+                Children =
+                {
+                    new Label
+                    {
+                        Text = $"🔑 Gemini Key Ready ({_visionService.GetMaskedApiKey()})",
+                        FontSize = 12.5,
+                        FontAttributes = FontAttributes.Bold,
+                        TextColor = AppThemeManager.Color("#4ADE80")
+                    },
+                    new Label
+                    {
+                        Text = "🔒 Encrypted on-device via SecureStorage",
+                        FontSize = 10.5,
+                        TextColor = AppThemeManager.Color("#94A3B8")
+                    }
+                }
+            }, 0, 0);
+
+            var manageBtn = new Button
+            {
+                Text = "⚙️ Key Settings",
+                FontSize = 11,
+                FontAttributes = FontAttributes.Bold,
+                BackgroundColor = AppThemeManager.Color("#0F172A"),
+                TextColor = AppThemeManager.Color("#38BDF8"),
+                BorderColor = AppThemeManager.Color("#334155"),
+                BorderWidth = 1,
+                CornerRadius = 6,
+                HeightRequest = 30,
+                Padding = new Thickness(10, 0),
+                VerticalOptions = LayoutOptions.Center
+            };
+            manageBtn.Clicked += async (_, _) => await OpenSettingsForApiKeyAsync();
+            row.Add(manageBtn, 1, 0);
+
+            compactCard.Content = row;
+            return compactCard;
+        }
+
+        // No key configured yet: clear callout with 1-tap jump to Settings
+        var setupCard = new Border
         {
             BackgroundColor = AppThemeManager.Color("#1E293B"),
-            Stroke = AppThemeManager.Color(hasKey ? "#334155" : "#D97706"),
-            StrokeThickness = 1,
+            Stroke = AppThemeManager.Color("#F59E0B"),
+            StrokeThickness = 1.5,
             StrokeShape = new RoundRectangle { CornerRadius = 10 },
             Padding = new Thickness(12, 10)
         };
 
         var stack = new VerticalStackLayout { Spacing = 8 };
-
-        var headerGrid = new Grid
+        stack.Children.Add(new Label
         {
-            ColumnDefinitions =
-            {
-                new ColumnDefinition { Width = GridLength.Star },
-                new ColumnDefinition { Width = GridLength.Auto }
-            },
-            ColumnSpacing = 8
-        };
-
-        var leftStack = new VerticalStackLayout { Spacing = 2 };
-        leftStack.Children.Add(new Label
-        {
-            Text = badgeText,
+            Text = "⚠️ Free Google Gemini API Key Required",
             FontSize = 13,
             FontAttributes = FontAttributes.Bold,
-            TextColor = Color.FromArgb(badgeColorHex),
-            LineBreakMode = LineBreakMode.WordWrap
+            TextColor = AppThemeManager.Color("#FBBF24")
         });
-        leftStack.Children.Add(new Label
+        stack.Children.Add(new Label
         {
-            Text = "🔒 Stored strictly on this device only — never exported or shared",
-            FontSize = 11,
-            TextColor = AppThemeManager.Color("#94A3B8"),
-            LineBreakMode = LineBreakMode.WordWrap
-        });
-
-        var detailsStack = new VerticalStackLayout
-        {
-            Spacing = 8,
-            IsVisible = _isApiKeyExpanded
-        };
-
-        var toggleBtn = new Button
-        {
-            Text = _isApiKeyExpanded ? "▲ Hide Key Setup" : "⚙️ API Key & Instructions",
-            FontSize = 11,
-            FontAttributes = FontAttributes.Bold,
-            BackgroundColor = AppThemeManager.Color("#0F172A"),
-            TextColor = AppThemeManager.Color("#38BDF8"),
-            BorderColor = AppThemeManager.Color("#334155"),
-            BorderWidth = 1,
-            CornerRadius = 6,
-            HeightRequest = 30,
-            Padding = new Thickness(10, 0),
-            VerticalOptions = LayoutOptions.Center
-        };
-        toggleBtn.Clicked += (_, _) =>
-        {
-            _isApiKeyExpanded = !_isApiKeyExpanded;
-            detailsStack.IsVisible = _isApiKeyExpanded;
-            toggleBtn.Text = _isApiKeyExpanded ? "▲ Hide Key Setup" : "⚙️ API Key & Instructions";
-        };
-
-        headerGrid.Add(leftStack, 0, 0);
-        headerGrid.Add(toggleBtn, 1, 0);
-        stack.Children.Add(headerGrid);
-
-        var instructionsBox = new Border
-        {
-            BackgroundColor = AppThemeManager.Color("#0F172A"),
-            Stroke = AppThemeManager.Color("#1E3A8A"),
-            StrokeThickness = 1,
-            StrokeShape = new RoundRectangle { CornerRadius = 8 },
-            Padding = new Thickness(10, 8)
-        };
-
-        var instStack = new VerticalStackLayout { Spacing = 5 };
-        instStack.Children.Add(new Label
-        {
-            Text = "HOW TO GET YOUR FREE GOOGLE GEMINI API KEY (TAKES 30 SECONDS):",
-            FontSize = 11,
-            FontAttributes = FontAttributes.Bold,
-            TextColor = AppThemeManager.Color("#38BDF8")
-        });
-        instStack.Children.Add(new Label
-        {
-            Text = "1. Tap '🌐 Get Free Key at Google AI Studio' below and sign in with your Google account.\n" +
-                   "2. Tap 'Create API key' and copy the key string (starts with AIza...).\n" +
-                   "3. Paste it into the box below and tap 'Save Key'.\n" +
-                   "• Privacy Guarantee: Your key stays in local device storage only. It is never included in profile JSON backups and is only sent directly to Google's Gemini endpoint when analyzing a scoreboard image.",
+            Text = "The AI Scoreboard Scanner uses your own free Google AI Studio API key (takes 30 seconds). Keys are encrypted on this device via SecureStorage and managed in Settings.",
             FontSize = 11.5,
             LineHeight = 1.2,
             TextColor = AppThemeManager.Color("#CBD5E1")
         });
 
-        var openStudioBtn = new Button
+        var openSettingsBtn = new Button
         {
-            Text = "🌐 Get Free Key at Google AI Studio",
-            FontSize = 11.5,
+            Text = "⚙️ Set Up Gemini API Key in Settings",
+            FontSize = 12.5,
             FontAttributes = FontAttributes.Bold,
-            BackgroundColor = AppThemeManager.Color("#0284C7"),
+            BackgroundColor = Color.FromArgb("#0284C7"),
             TextColor = Colors.White,
-            CornerRadius = 6,
-            HeightRequest = 34,
-            Margin = new Thickness(0, 4, 0, 0)
-        };
-        openStudioBtn.Clicked += async (_, _) =>
-        {
-            try
-            {
-                await Launcher.Default.OpenAsync(new Uri(GeminiScoreboardVisionService.GoogleAiStudioKeyUrl));
-            }
-            catch (Exception ex)
-            {
-                await DisplayAlertAsync("Browser Error", $"Visit {GeminiScoreboardVisionService.GoogleAiStudioKeyUrl}\n({ex.Message})", "OK");
-            }
-        };
-        instStack.Children.Add(openStudioBtn);
-        instructionsBox.Content = instStack;
-        detailsStack.Children.Add(instructionsBox);
-
-        var keyEntry = new Entry
-        {
-            Placeholder = "Paste Gemini API Key (AIza...)",
-            PlaceholderColor = AppThemeManager.Color("#64748B"),
-            Text = _visionService.GetApiKey(),
-            IsPassword = true,
-            FontSize = 13,
-            TextColor = AppThemeManager.Color("#F8FAFC"),
-            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            CornerRadius = 8,
             HeightRequest = 38
         };
+        openSettingsBtn.Clicked += async (_, _) => await OpenSettingsForApiKeyAsync();
+        stack.Children.Add(openSettingsBtn);
 
-        var btnRow = new Grid
-        {
-            ColumnDefinitions =
-            {
-                new ColumnDefinition { Width = GridLength.Star },
-                new ColumnDefinition { Width = GridLength.Auto },
-                new ColumnDefinition { Width = GridLength.Auto }
-            },
-            ColumnSpacing = 8
-        };
-
-        var showHideBtn = new Button
-        {
-            Text = "👁 Show",
-            FontSize = 11,
-            BackgroundColor = AppThemeManager.Color("#334155"),
-            TextColor = AppThemeManager.Color("#E2E8F0"),
-            CornerRadius = 6,
-            HeightRequest = 36,
-            Padding = new Thickness(10, 0)
-        };
-        showHideBtn.Clicked += (_, _) =>
-        {
-            keyEntry.IsPassword = !keyEntry.IsPassword;
-            showHideBtn.Text = keyEntry.IsPassword ? "👁 Show" : "🙈 Hide";
-        };
-
-        var clearKeyBtn = new Button
-        {
-            Text = "🗑 Clear",
-            FontSize = 11,
-            BackgroundColor = AppThemeManager.Color("#7F1D1D"),
-            TextColor = Colors.White,
-            CornerRadius = 6,
-            HeightRequest = 36,
-            Padding = new Thickness(10, 0)
-        };
-        clearKeyBtn.Clicked += (_, _) =>
-        {
-            _visionService.SaveApiKey(string.Empty);
-            keyEntry.Text = string.Empty;
-            _statusMessage = "Cleared saved Gemini API key from this device.";
-            _isStatusError = false;
-            SaveStateToSessionCache();
-            BuildLayout();
-        };
-
-        var saveKeyBtn = new Button
-        {
-            Text = "💾 Save Key",
-            FontSize = 12,
-            FontAttributes = FontAttributes.Bold,
-            BackgroundColor = Color.FromArgb("#16A34A"),
-            TextColor = Colors.White,
-            CornerRadius = 6,
-            HeightRequest = 36
-        };
-        saveKeyBtn.Clicked += (_, _) =>
-        {
-            string entered = keyEntry.Text?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(entered))
-            {
-                _statusMessage = "Please paste a valid Gemini API key before saving.";
-                _isStatusError = true;
-                SaveStateToSessionCache();
-                BuildLayout();
-                return;
-            }
-
-            _visionService.SaveApiKey(entered);
-            _isApiKeyExpanded = false;
-            _statusMessage = "Gemini API key saved locally on this device.";
-            _isStatusError = false;
-            SaveStateToSessionCache();
-            BuildLayout();
-        };
-
-        btnRow.Add(saveKeyBtn, 0, 0);
-        btnRow.Add(showHideBtn, 1, 0);
-        btnRow.Add(clearKeyBtn, 2, 0);
-
-        detailsStack.Children.Add(keyEntry);
-        detailsStack.Children.Add(btnRow);
-        stack.Children.Add(detailsStack);
-
-        card.Content = stack;
-        return card;
+        setupCard.Content = stack;
+        return setupCard;
     }
 
     private void ClearAnalysisResults()
@@ -1092,7 +1025,7 @@ public class ScoreboardScannerModalPage : ContentPage
                 Text = text,
                 FontSize = 11,
                 FontAttributes = FontAttributes.Bold,
-                BackgroundColor = isActive ? Color.FromArgb("#0284C7") : AppThemeManager.Color("#1E293B"),
+                BackgroundColor = isActive ? Color.FromArgb("#0284C7") : Color.FromArgb("#1E293B"),
                 TextColor = Colors.White,
                 CornerRadius = 6,
                 HeightRequest = 34,
@@ -1129,6 +1062,9 @@ public class ScoreboardScannerModalPage : ContentPage
         topBar.Add(closeOverlayBtn, 4, 0);
         grid.Add(topBar, 0, 0);
 
+        double baseImageWidth = Math.Max(340, (Width > 0 ? Width : 390) - 36);
+        double baseImageHeight = Math.Max(260, (Height > 0 ? Height : 640) - 150);
+
         byte[] bytesCopy = _photoBytes!;
         var fullImage = new Image
         {
@@ -1140,8 +1076,8 @@ public class ScoreboardScannerModalPage : ContentPage
 
         if (_expandedPhotoZoom > 1.01)
         {
-            fullImage.WidthRequest = 360 * _expandedPhotoZoom;
-            fullImage.HeightRequest = 480 * _expandedPhotoZoom;
+            fullImage.WidthRequest = baseImageWidth * _expandedPhotoZoom;
+            fullImage.HeightRequest = baseImageHeight * _expandedPhotoZoom;
         }
 
         var pinch = new PinchGestureRecognizer();
@@ -1150,8 +1086,8 @@ public class ScoreboardScannerModalPage : ContentPage
             if (e.Status == GestureStatus.Running)
             {
                 double nextZoom = Math.Clamp(_expandedPhotoZoom * e.Scale, 1.0, 4.0);
-                fullImage.WidthRequest = 360 * nextZoom;
-                fullImage.HeightRequest = 480 * nextZoom;
+                fullImage.WidthRequest = baseImageWidth * nextZoom;
+                fullImage.HeightRequest = baseImageHeight * nextZoom;
                 _expandedPhotoZoom = nextZoom;
             }
         };
@@ -1168,7 +1104,7 @@ public class ScoreboardScannerModalPage : ContentPage
         {
             Text = "Use 1x / 2x / 3x or pinch to zoom and scroll around the scoreboard • Tap '✕ Close' to return",
             FontSize = 11,
-            TextColor = AppThemeManager.Color("#94A3B8"),
+            TextColor = Color.FromArgb("#94A3B8"),
             HorizontalTextAlignment = TextAlignment.Center
         }, 0, 2);
 
@@ -1184,8 +1120,8 @@ public class ScoreboardScannerModalPage : ContentPage
 
         return new Border
         {
-            BackgroundColor = Color.FromArgb(bgHex),
-            Stroke = Color.FromArgb(borderHex),
+            BackgroundColor = AppThemeManager.Color(bgHex),
+            Stroke = AppThemeManager.Color(borderHex),
             StrokeThickness = 1,
             StrokeShape = new RoundRectangle { CornerRadius = 8 },
             Padding = new Thickness(10, 8),
@@ -1193,7 +1129,7 @@ public class ScoreboardScannerModalPage : ContentPage
             {
                 Text = _statusMessage,
                 FontSize = 12,
-                TextColor = Color.FromArgb(textHex)
+                TextColor = AppThemeManager.Color(textHex)
             }
         };
     }
@@ -1283,7 +1219,7 @@ public class ScoreboardScannerModalPage : ContentPage
                 : $"👥 All {_lifterRows.Count} Lifter Rows Included in Analysis",
             FontSize = 12,
             FontAttributes = FontAttributes.Bold,
-            TextColor = excludedCount > 0 ? Color.FromArgb("#FBBF24") : AppThemeManager.Color("#E2E8F0")
+            TextColor = excludedCount > 0 ? AppThemeManager.Color("#FBBF24") : AppThemeManager.Color("#E2E8F0")
         });
         excludeInfoStack.Children.Add(new Label
         {
@@ -1305,9 +1241,9 @@ public class ScoreboardScannerModalPage : ContentPage
                 : (excludedCount > 0 ? $"⚙️ Manage ({excludedCount} Excl.)" : "🚫 Exclude Rows"),
             FontSize = 11,
             FontAttributes = FontAttributes.Bold,
-            BackgroundColor = excludedCount > 0 ? Color.FromArgb("#451A03") : AppThemeManager.Color("#0F172A"),
-            TextColor = excludedCount > 0 ? Color.FromArgb("#FDE68A") : AppThemeManager.Color("#38BDF8"),
-            BorderColor = excludedCount > 0 ? Color.FromArgb("#F59E0B") : AppThemeManager.Color("#334155"),
+            BackgroundColor = excludedCount > 0 ? AppThemeManager.Color("#451A03") : AppThemeManager.Color("#0F172A"),
+            TextColor = excludedCount > 0 ? AppThemeManager.Color("#FDE68A") : AppThemeManager.Color("#38BDF8"),
+            BorderColor = excludedCount > 0 ? AppThemeManager.Color("#F59E0B") : AppThemeManager.Color("#334155"),
             BorderWidth = 1,
             CornerRadius = 6,
             HeightRequest = 32,
@@ -1366,6 +1302,7 @@ public class ScoreboardScannerModalPage : ContentPage
             if (_overrideAutoPlusOne != e.Value)
             {
                 _overrideAutoPlusOne = e.Value;
+                _viewModel.ReplaceAutoOneKgAfterMake = e.Value;
                 _snatchApplied = false;
                 _cjApplied = false;
                 RecalculateScoreboard();
@@ -1424,7 +1361,7 @@ public class ScoreboardScannerModalPage : ContentPage
             FontSize = 11,
             FontAttributes = FontAttributes.Bold,
             BackgroundColor = AppThemeManager.Color("#1E293B"),
-            TextColor = Color.FromArgb("#4ADE80"),
+            TextColor = AppThemeManager.Color("#4ADE80"),
             BorderColor = AppThemeManager.Color("#334155"),
             BorderWidth = 1,
             CornerRadius = 6,
@@ -1448,7 +1385,7 @@ public class ScoreboardScannerModalPage : ContentPage
             FontSize = 11,
             FontAttributes = FontAttributes.Bold,
             BackgroundColor = AppThemeManager.Color("#1E293B"),
-            TextColor = Color.FromArgb("#FCA5A5"),
+            TextColor = AppThemeManager.Color("#FCA5A5"),
             BorderColor = AppThemeManager.Color("#334155"),
             BorderWidth = 1,
             CornerRadius = 6,
@@ -1505,8 +1442,8 @@ public class ScoreboardScannerModalPage : ContentPage
                 FontSize = 11.5,
                 FontAttributes = isUser ? FontAttributes.Bold : FontAttributes.None,
                 TextColor = isExcl
-                    ? Color.FromArgb("#94A3B8")
-                    : (isUser ? Color.FromArgb("#38BDF8") : AppThemeManager.Color("#F8FAFC")),
+                    ? AppThemeManager.Color("#94A3B8")
+                    : (isUser ? AppThemeManager.Color("#38BDF8") : AppThemeManager.Color("#F8FAFC")),
                 TextDecorations = isExcl ? TextDecorations.Strikethrough : TextDecorations.None,
                 VerticalOptions = LayoutOptions.Center,
                 LineBreakMode = LineBreakMode.TailTruncation
@@ -1518,9 +1455,11 @@ public class ScoreboardScannerModalPage : ContentPage
                 FontSize = 10.5,
                 FontAttributes = FontAttributes.Bold,
                 BackgroundColor = isExcl
-                    ? Color.FromArgb("#450A0A")
-                    : (isUser ? Color.FromArgb("#0369A1") : Color.FromArgb("#064E3B")),
-                TextColor = isExcl ? Color.FromArgb("#FCA5A5") : Colors.White,
+                    ? AppThemeManager.Color("#450A0A")
+                    : (isUser ? Color.FromArgb("#0369A1") : AppThemeManager.Color("#064E3B")),
+                TextColor = isExcl
+                    ? AppThemeManager.Color("#FCA5A5")
+                    : (isUser ? Colors.White : AppThemeManager.Color("#A7F3D0")),
                 CornerRadius = 6,
                 HeightRequest = 28,
                 Padding = new Thickness(8, 0),
@@ -1590,7 +1529,7 @@ public class ScoreboardScannerModalPage : ContentPage
                 Text = "✓ Applied to Warmup",
                 FontSize = 11,
                 FontAttributes = FontAttributes.Bold,
-                TextColor = Color.FromArgb("#4ADE80"),
+                TextColor = AppThemeManager.Color("#4ADE80"),
                 VerticalOptions = LayoutOptions.Center
             }, 1, 0);
         }
@@ -1605,7 +1544,7 @@ public class ScoreboardScannerModalPage : ContentPage
             stack.Children.Add(new Border
             {
                 BackgroundColor = AppThemeManager.Color("#0F172A"),
-                Stroke = Color.FromArgb("#64748B"),
+                Stroke = AppThemeManager.Color("#64748B"),
                 StrokeThickness = 1,
                 StrokeShape = new RoundRectangle { CornerRadius = 8 },
                 Padding = new Thickness(12, 10),
@@ -1636,8 +1575,8 @@ public class ScoreboardScannerModalPage : ContentPage
         {
             stack.Children.Add(new Border
             {
-                BackgroundColor = Color.FromArgb("#064E3B"),
-                Stroke = Color.FromArgb("#10B981"),
+                BackgroundColor = AppThemeManager.Color("#064E3B"),
+                Stroke = AppThemeManager.Color("#10B981"),
                 StrokeThickness = 1,
                 StrokeShape = new RoundRectangle { CornerRadius = 8 },
                 Padding = new Thickness(12, 10),
@@ -1651,13 +1590,13 @@ public class ScoreboardScannerModalPage : ContentPage
                             Text = $"✅ {result.UserOpenerCompletedMessage ?? $"You have already lifted your {disciplineShort} opener on stage — the app is done with {disciplineShort}."}",
                             FontSize = 13,
                             FontAttributes = FontAttributes.Bold,
-                            TextColor = Color.FromArgb("#A7F3D0")
+                            TextColor = AppThemeManager.Color("#A7F3D0")
                         },
                         new Label
                         {
                             Text = $"Once your opener is lifted on stage, Lifts Out is no longer calculated for {disciplineShort}.",
                             FontSize = 11.5,
-                            TextColor = Color.FromArgb("#D1FAE5")
+                            TextColor = AppThemeManager.Color("#D1FAE5")
                         }
                     }
                 }
@@ -1680,8 +1619,8 @@ public class ScoreboardScannerModalPage : ContentPage
                 FontSize = 12,
                 FontAttributes = FontAttributes.Bold,
                 BackgroundColor = AppThemeManager.Color("#1E293B"),
-                TextColor = Color.FromArgb("#FBBF24"),
-                BorderColor = Color.FromArgb("#F59E0B"),
+                TextColor = AppThemeManager.Color("#FBBF24"),
+                BorderColor = AppThemeManager.Color("#F59E0B"),
                 BorderWidth = 1,
                 CornerRadius = 7,
                 HeightRequest = 36
@@ -1706,8 +1645,8 @@ public class ScoreboardScannerModalPage : ContentPage
             {
                 stack.Children.Add(new Border
                 {
-                    BackgroundColor = Color.FromArgb("#451A03"),
-                    Stroke = Color.FromArgb("#F59E0B"),
+                    BackgroundColor = AppThemeManager.Color("#451A03"),
+                    Stroke = AppThemeManager.Color("#F59E0B"),
                     StrokeThickness = 1.5,
                     StrokeShape = new RoundRectangle { CornerRadius = 8 },
                     Padding = new Thickness(10, 8),
@@ -1716,7 +1655,26 @@ public class ScoreboardScannerModalPage : ContentPage
                         Text = $"⚠️ {result.BarPastUserOpenerMessage ?? $"Cannot determine Lifts Out because {result.MaxCompletedWeightKg} kg has already been lifted on the scoreboard, which is heavier than your {result.UserOpenerWeightKg} kg Opener in the app. Lifts Out will be left as-is."} (Current {disciplineShort} Lifts Out: {existingLiftsOut})",
                         FontSize = 11.5,
                         FontAttributes = FontAttributes.Bold,
-                        TextColor = Color.FromArgb("#FDE68A")
+                        TextColor = AppThemeManager.Color("#FDE68A")
+                    }
+                });
+            }
+            else if (result.SelfFollowCountBeforeUser > 0)
+            {
+                string plural = result.SelfFollowCountBeforeUser == 1 ? string.Empty : "s";
+                stack.Children.Add(new Border
+                {
+                    BackgroundColor = AppThemeManager.Color("#451A03"),
+                    Stroke = AppThemeManager.Color("#F59E0B"),
+                    StrokeThickness = 1,
+                    StrokeShape = new RoundRectangle { CornerRadius = 8 },
+                    Padding = new Thickness(10, 7),
+                    Content = new Label
+                    {
+                        Text = $"⏱ {result.SelfFollowCountBeforeUser} projected 2-min self-follow clock{plural} before your opener (~+{result.SelfFollowCountBeforeUser} min extra time). Use +1m (2-Min) in Live mode when a lifter follows themselves.",
+                        FontSize = 11,
+                        FontAttributes = FontAttributes.Bold,
+                        TextColor = AppThemeManager.Color("#FDE68A")
                     }
                 });
             }
@@ -1918,7 +1876,7 @@ public class ScoreboardScannerModalPage : ContentPage
         return new Border
         {
             BackgroundColor = AppThemeManager.Color("#0F172A"),
-            Stroke = borderHex != null ? Color.FromArgb(borderHex) : AppThemeManager.Color("#334155"),
+            Stroke = borderHex != null ? AppThemeManager.Color(borderHex) : AppThemeManager.Color("#334155"),
             StrokeThickness = borderHex != null ? 1.5 : 1,
             StrokeShape = new RoundRectangle { CornerRadius = 8 },
             Padding = new Thickness(6, 7),
@@ -1934,7 +1892,7 @@ public class ScoreboardScannerModalPage : ContentPage
                         Text = label,
                         FontSize = 9.5,
                         FontAttributes = FontAttributes.Bold,
-                        TextColor = borderHex != null ? Color.FromArgb("#FDE68A") : AppThemeManager.Color("#94A3B8"),
+                        TextColor = borderHex != null ? AppThemeManager.Color("#FDE68A") : AppThemeManager.Color("#94A3B8"),
                         HorizontalTextAlignment = TextAlignment.Center,
                         LineBreakMode = LineBreakMode.WordWrap
                     },
@@ -1943,7 +1901,7 @@ public class ScoreboardScannerModalPage : ContentPage
                         Text = value,
                         FontSize = 18,
                         FontAttributes = FontAttributes.Bold,
-                        TextColor = Color.FromArgb(accentHex),
+                        TextColor = AppThemeManager.Color(accentHex),
                         HorizontalTextAlignment = TextAlignment.Center,
                         LineBreakMode = LineBreakMode.NoWrap
                     },
@@ -1951,7 +1909,7 @@ public class ScoreboardScannerModalPage : ContentPage
                     {
                         Text = subtext,
                         FontSize = 9,
-                        TextColor = borderHex != null ? Color.FromArgb("#FBBF24") : AppThemeManager.Color("#64748B"),
+                        TextColor = borderHex != null ? AppThemeManager.Color("#FBBF24") : AppThemeManager.Color("#64748B"),
                         HorizontalTextAlignment = TextAlignment.Center,
                         LineBreakMode = LineBreakMode.WordWrap
                     }
@@ -2085,15 +2043,15 @@ public class ScoreboardScannerModalPage : ContentPage
             var rowBorder = new Border
             {
                 BackgroundColor = isExcluded
-                    ? Color.FromArgb("#1A1118")
+                    ? AppThemeManager.Color("#1A1118")
                     : (isUser ? AppThemeManager.Color("#0C2D48") : AppThemeManager.Color("#0F172A")),
                 Stroke = isExcluded
-                    ? Color.FromArgb("#7F1D1D")
-                    : (isUser ? Color.FromArgb("#38BDF8") : AppThemeManager.Color("#334155")),
+                    ? AppThemeManager.Color("#7F1D1D")
+                    : (isUser ? AppThemeManager.Color("#38BDF8") : AppThemeManager.Color("#334155")),
                 StrokeThickness = isUser ? 1.5 : 1,
                 StrokeShape = new RoundRectangle { CornerRadius = 8 },
                 Padding = new Thickness(8, 7),
-                Opacity = isExcluded ? 0.78 : 1.0
+                Opacity = isExcluded ? 0.82 : 1.0
             };
 
             var rowGrid = new Grid
@@ -2125,8 +2083,8 @@ public class ScoreboardScannerModalPage : ContentPage
                 FontSize = 11.5,
                 FontAttributes = FontAttributes.Bold,
                 TextColor = isExcluded
-                    ? Color.FromArgb("#FCA5A5")
-                    : (isUser ? Color.FromArgb("#38BDF8") : AppThemeManager.Color("#F8FAFC")),
+                    ? AppThemeManager.Color("#FCA5A5")
+                    : (isUser ? AppThemeManager.Color("#38BDF8") : AppThemeManager.Color("#F8FAFC")),
                 TextDecorations = isExcluded ? TextDecorations.Strikethrough : TextDecorations.None,
                 LineBreakMode = LineBreakMode.WordWrap
             });
@@ -2142,8 +2100,8 @@ public class ScoreboardScannerModalPage : ContentPage
                     : (isUser ? $"{lotOrGroup} • YOU" : $"{lotOrGroup} (Tap=Me)"),
                 FontSize = 10,
                 TextColor = isExcluded
-                    ? Color.FromArgb("#F87171")
-                    : (isUser ? Color.FromArgb("#7DD3FC") : AppThemeManager.Color("#94A3B8"))
+                    ? AppThemeManager.Color("#F87171")
+                    : (isUser ? AppThemeManager.Color("#7DD3FC") : AppThemeManager.Color("#94A3B8"))
             });
 
             var selectMeTap = new TapGestureRecognizer();
@@ -2174,9 +2132,9 @@ public class ScoreboardScannerModalPage : ContentPage
                     Text = isExcluded ? "↩️ Include" : "🚫 Exclude",
                     FontSize = 9.5,
                     FontAttributes = FontAttributes.Bold,
-                    BackgroundColor = isExcluded ? Color.FromArgb("#064E3B") : AppThemeManager.Color("#1E293B"),
-                    TextColor = isExcluded ? Color.FromArgb("#A7F3D0") : Color.FromArgb("#FCA5A5"),
-                    BorderColor = isExcluded ? Color.FromArgb("#10B981") : AppThemeManager.Color("#475569"),
+                    BackgroundColor = isExcluded ? AppThemeManager.Color("#064E3B") : AppThemeManager.Color("#1E293B"),
+                    TextColor = isExcluded ? AppThemeManager.Color("#A7F3D0") : AppThemeManager.Color("#FCA5A5"),
+                    BorderColor = isExcluded ? AppThemeManager.Color("#10B981") : AppThemeManager.Color("#475569"),
                     BorderWidth = 1,
                     CornerRadius = 5,
                     HeightRequest = 22,
@@ -2193,8 +2151,8 @@ public class ScoreboardScannerModalPage : ContentPage
             {
                 var excludedBanner = new Border
                 {
-                    BackgroundColor = Color.FromArgb("#2A1215"),
-                    Stroke = Color.FromArgb("#7F1D1D"),
+                    BackgroundColor = AppThemeManager.Color("#2A1215"),
+                    Stroke = AppThemeManager.Color("#7F1D1D"),
                     StrokeThickness = 1,
                     StrokeShape = new RoundRectangle { CornerRadius = 6 },
                     Padding = new Thickness(8, 6),
@@ -2203,7 +2161,7 @@ public class ScoreboardScannerModalPage : ContentPage
                     {
                         Text = "🚫 Excluded from analysis\nTap '↩️ Include' to restore",
                         FontSize = 10,
-                        TextColor = Color.FromArgb("#FCA5A5"),
+                        TextColor = AppThemeManager.Color("#FCA5A5"),
                         HorizontalTextAlignment = TextAlignment.Center
                     }
                 };
@@ -2363,7 +2321,7 @@ public class ScoreboardScannerModalPage : ContentPage
             Text = $"✅ COMPLETED LIFTS ON BOARD (LIFTS PASSED: {result.CompletedCalls.Count})",
             FontSize = 11,
             FontAttributes = FontAttributes.Bold,
-            TextColor = Color.FromArgb("#4ADE80"),
+            TextColor = AppThemeManager.Color("#4ADE80"),
             Margin = new Thickness(0, 4, 0, 0)
         });
 
@@ -2397,7 +2355,7 @@ public class ScoreboardScannerModalPage : ContentPage
                 : $"⏳ UPCOMING LIFTS BEFORE YOUR OPENER (LIFTS OUT: {result.LiftsOut})",
             FontSize = 11,
             FontAttributes = FontAttributes.Bold,
-            TextColor = result.IsBarPastUserOpener ? Color.FromArgb("#F59E0B") : Color.FromArgb("#38BDF8"),
+            TextColor = result.IsBarPastUserOpener ? AppThemeManager.Color("#F59E0B") : AppThemeManager.Color("#38BDF8"),
             Margin = new Thickness(0, 6, 0, 0)
         });
 
@@ -2405,8 +2363,8 @@ public class ScoreboardScannerModalPage : ContentPage
         {
             stack.Children.Add(new Border
             {
-                BackgroundColor = Color.FromArgb("#451A03"),
-                Stroke = Color.FromArgb("#F59E0B"),
+                BackgroundColor = AppThemeManager.Color("#451A03"),
+                Stroke = AppThemeManager.Color("#F59E0B"),
                 StrokeThickness = 1,
                 StrokeShape = new RoundRectangle { CornerRadius = 7 },
                 Padding = new Thickness(10, 8),
@@ -2416,7 +2374,7 @@ public class ScoreboardScannerModalPage : ContentPage
                            $"Cannot determine Lifts Out because {result.MaxCompletedWeightKg} kg has already been lifted on the scoreboard, which is heavier than your {result.UserOpenerWeightKg} kg Opener in the app. Lifts Out will be left as-is.",
                     FontSize = 11.5,
                     FontAttributes = FontAttributes.Bold,
-                    TextColor = Color.FromArgb("#FDE68A")
+                    TextColor = AppThemeManager.Color("#FDE68A")
                 }
             });
         }
@@ -2425,7 +2383,7 @@ public class ScoreboardScannerModalPage : ContentPage
             stack.Children.Add(new Border
             {
                 BackgroundColor = AppThemeManager.Color("#0F172A"),
-                Stroke = Color.FromArgb("#38BDF8"),
+                Stroke = AppThemeManager.Color("#38BDF8"),
                 StrokeThickness = 1,
                 StrokeShape = new RoundRectangle { CornerRadius = 7 },
                 Padding = new Thickness(10, 8),
@@ -2434,7 +2392,7 @@ public class ScoreboardScannerModalPage : ContentPage
                     Text = "0 Lifts Out — You are first up on the platform!",
                     FontSize = 12,
                     FontAttributes = FontAttributes.Bold,
-                    TextColor = Color.FromArgb("#38BDF8")
+                    TextColor = AppThemeManager.Color("#38BDF8")
                 }
             });
         }
@@ -2460,8 +2418,8 @@ public class ScoreboardScannerModalPage : ContentPage
 
             var userOpenerCard = new Border
             {
-                BackgroundColor = result.IsBarPastUserOpener ? Color.FromArgb("#451A03") : Color.FromArgb("#0C4A6E"),
-                Stroke = result.IsBarPastUserOpener ? Color.FromArgb("#F59E0B") : Color.FromArgb("#38BDF8"),
+                BackgroundColor = result.IsBarPastUserOpener ? AppThemeManager.Color("#451A03") : Color.FromArgb("#0C4A6E"),
+                Stroke = result.IsBarPastUserOpener ? AppThemeManager.Color("#F59E0B") : Color.FromArgb("#38BDF8"),
                 StrokeThickness = 2,
                 StrokeShape = new RoundRectangle { CornerRadius = 8 },
                 Padding = new Thickness(10, 9),
@@ -2476,13 +2434,13 @@ public class ScoreboardScannerModalPage : ContentPage
                             Text = $"🎯 YOUR OPENER — {u.WeightKg} kg (1st Attempt) • {u.LifterName} (Lot #{u.SeedNumber}) ✏️",
                             FontSize = 13,
                             FontAttributes = FontAttributes.Bold,
-                            TextColor = Colors.White
+                            TextColor = result.IsBarPastUserOpener ? AppThemeManager.Color("#F8FAFC") : Colors.White
                         },
                         new Label
                         {
                             Text = $"{subLineText}\n✏️ Tap to change your opener weight (updates Setup & Live)",
                             FontSize = 11,
-                            TextColor = result.IsBarPastUserOpener ? Color.FromArgb("#FDE68A") : Color.FromArgb("#BAE6FD")
+                            TextColor = result.IsBarPastUserOpener ? AppThemeManager.Color("#FDE68A") : Color.FromArgb("#BAE6FD")
                         }
                     }
                 }
@@ -2593,15 +2551,42 @@ public class ScoreboardScannerModalPage : ContentPage
             LineBreakMode = LineBreakMode.TailTruncation
         }, 2, 0);
 
-        topLine.Add(new Label
+        var rightOriginStack = new HorizontalStackLayout
+        {
+            Spacing = 4,
+            VerticalOptions = LayoutOptions.Center
+        };
+
+        if (call.IsSelfFollowTwoMinClock)
+        {
+            rightOriginStack.Children.Add(new Border
+            {
+                BackgroundColor = AppThemeManager.Color("#451A03"),
+                Stroke = AppThemeManager.Color("#F59E0B"),
+                StrokeThickness = 1,
+                StrokeShape = new RoundRectangle { CornerRadius = 4 },
+                Padding = new Thickness(5, 1),
+                VerticalOptions = LayoutOptions.Center,
+                Content = new Label
+                {
+                    Text = "⏱ 2-MIN",
+                    FontSize = 9,
+                    FontAttributes = FontAttributes.Bold,
+                    TextColor = AppThemeManager.Color("#FDE68A")
+                }
+            });
+        }
+
+        rightOriginStack.Children.Add(new Label
         {
             Text = originBadge,
             FontSize = 10,
             TextColor = call.Origin is ScoreboardAttemptOrigin.ProjectedSCurve or ScoreboardAttemptOrigin.ProjectedFromAutoOneKg
-                ? Color.FromArgb("#C084FC")
+                ? AppThemeManager.Color("#C084FC")
                 : AppThemeManager.Color("#94A3B8"),
             VerticalOptions = LayoutOptions.Center
-        }, 3, 0);
+        });
+        topLine.Add(rightOriginStack, 3, 0);
 
         rowStack.Children.Add(topLine);
 
@@ -2611,7 +2596,7 @@ public class ScoreboardScannerModalPage : ContentPage
             {
                 Text = $"⚖️ {call.SequenceReasonNote}",
                 FontSize = 10.5,
-                TextColor = Color.FromArgb("#FBBF24"),
+                TextColor = AppThemeManager.Color("#FBBF24"),
                 Margin = new Thickness(4, 0, 0, 0)
             });
         }
@@ -2619,8 +2604,10 @@ public class ScoreboardScannerModalPage : ContentPage
         return new Border
         {
             BackgroundColor = AppThemeManager.Color("#0F172A"),
-            Stroke = isBeforeUser ? AppThemeManager.Color("#1E3A8A") : AppThemeManager.Color("#334155"),
-            StrokeThickness = 1,
+            Stroke = call.IsSelfFollowTwoMinClock
+                ? AppThemeManager.Color("#F59E0B")
+                : (isBeforeUser ? AppThemeManager.Color("#1E3A8A") : AppThemeManager.Color("#334155")),
+            StrokeThickness = call.IsSelfFollowTwoMinClock ? 1.5 : 1,
             StrokeShape = new RoundRectangle { CornerRadius = 7 },
             Padding = new Thickness(8, 6),
             Content = rowStack
@@ -2677,11 +2664,7 @@ public class ScoreboardScannerModalPage : ContentPage
             HeightRequest = 42,
             HorizontalOptions = LayoutOptions.Fill
         };
-        closeBtn.Clicked += async (_, _) =>
-        {
-            SaveStateToSessionCache();
-            await Navigation.PopModalAsync();
-        };
+        closeBtn.Clicked += async (_, _) => await CloseModalAsync();
 
         return closeBtn;
     }
@@ -2719,10 +2702,10 @@ public class ScoreboardScannerModalPage : ContentPage
             Text = "✉️ Report Analysis Error",
             FontSize = 12.5,
             FontAttributes = FontAttributes.Bold,
-            BackgroundColor = Color.FromArgb("#451A03"),
-            BorderColor = Color.FromArgb("#F59E0B"),
+            BackgroundColor = AppThemeManager.Color("#451A03"),
+            BorderColor = AppThemeManager.Color("#F59E0B"),
             BorderWidth = 1,
-            TextColor = Color.FromArgb("#FDE68A"),
+            TextColor = AppThemeManager.Color("#FDE68A"),
             CornerRadius = 8,
             MinimumHeightRequest = 42,
             Padding = new Thickness(12, 6),
@@ -3129,16 +3112,7 @@ public class ScoreboardScannerModalPage : ContentPage
                             _progressElapsedLabel.Text = $"{elapsedSec}s";
                         }
 
-                        if (_isAnalyzing &&
-                            elapsedSec >= 6 &&
-                            _progressDetailLabel != null &&
-                            !_scanDetailMessage.Contains("AI model is still analyzing", StringComparison.OrdinalIgnoreCase))
-                        {
-                            _progressDetailLabel.Text = $"{_scanDetailMessage} — AI model is still analyzing the table ({elapsedSec}s)...";
-                        }
-                        else if (_isAnalyzing &&
-                                 elapsedSec >= 6 &&
-                                 _progressDetailLabel != null)
+                        if (_isAnalyzing && elapsedSec >= 6 && _progressDetailLabel != null)
                         {
                             _progressDetailLabel.Text = $"{_scanDetailMessage} — AI model is still analyzing the table ({elapsedSec}s)...";
                         }
@@ -3156,11 +3130,11 @@ public class ScoreboardScannerModalPage : ContentPage
     {
         if (!_visionService.HasApiKey())
         {
-            _isApiKeyExpanded = true;
-            _statusMessage = "Please save your free Gemini API key first before scanning a scoreboard.";
+            _statusMessage = "Please save your free Gemini API key in Settings first before scanning a scoreboard.";
             _isStatusError = true;
             SaveStateToSessionCache();
             BuildLayout();
+            await OpenSettingsForApiKeyAsync();
             return;
         }
 
@@ -3215,8 +3189,8 @@ public class ScoreboardScannerModalPage : ContentPage
             }
 
             _isAnalyzing = true;
-            _scanStageTitle = "Step 1/4: Loading selected photo...";
-            _scanDetailMessage = "Reading image file from device storage";
+            _scanStageTitle = "Step 1/4: Loading & optimizing selected photo...";
+            _scanDetailMessage = "Auto-orienting and resizing image for fast AI Vision upload";
             _scanProgressFraction = 0.08;
             _scanIsRetryOrFallback = false;
             _scanStopwatch.Restart();
@@ -3235,8 +3209,11 @@ public class ScoreboardScannerModalPage : ContentPage
                 ? photo.ContentType
                 : "image/jpeg";
 
-            _photoBytes = imageBytes;
-            _photoMimeType = mimeType;
+            var (preparedBytes, preparedMime) = await Task.Run(() =>
+                ScoreboardImagePreprocessor.PrepareForVisionUpload(imageBytes, mimeType));
+
+            _photoBytes = preparedBytes;
+            _photoMimeType = preparedMime;
             _isPhotoExpanded = false;
             SaveStateToSessionCache();
 
@@ -3262,11 +3239,11 @@ public class ScoreboardScannerModalPage : ContentPage
 
         if (!_visionService.HasApiKey())
         {
-            _isApiKeyExpanded = true;
-            _statusMessage = "Please save your free Gemini API key first before scanning a scoreboard.";
+            _statusMessage = "Please save your free Gemini API key in Settings first before scanning a scoreboard.";
             _isStatusError = true;
             SaveStateToSessionCache();
             BuildLayout();
+            await OpenSettingsForApiKeyAsync();
             return;
         }
 
@@ -3391,14 +3368,15 @@ public class ScoreboardScannerModalPage : ContentPage
             return;
         }
 
-        if (int.TryParse(input.Trim(), out int newOpener) && newOpener >= 15 && newOpener <= 300)
+        int minWeight = Math.Min(Defaults.MinBarbellWeight, _viewModel.BarbellWeight);
+        if (int.TryParse(input.Trim(), out int newOpener) && newOpener >= minWeight && newOpener <= 300)
         {
             ApplyUpdatedOpenerWeightAndSync(discipline, newOpener);
             BuildLayout();
         }
         else
         {
-            await DisplayAlertAsync("Invalid Weight", "Please enter a whole kilogram weight between 15 and 300 kg.", "OK");
+            await DisplayAlertAsync("Invalid Weight", $"Please enter a whole kilogram weight between {minWeight} and 300 kg.", "OK");
         }
     }
 
@@ -3474,7 +3452,8 @@ public class ScoreboardScannerModalPage : ContentPage
                 initialValue: existingKg.ToString(),
                 keyboard: Keyboard.Numeric);
 
-            if (string.IsNullOrWhiteSpace(weightStr) || !int.TryParse(weightStr.Trim(), out int newKg) || newKg < 15 || newKg > 350)
+            int minWeight = Math.Min(Defaults.MinBarbellWeight, _viewModel.BarbellWeight);
+            if (string.IsNullOrWhiteSpace(weightStr) || !int.TryParse(weightStr.Trim(), out int newKg) || newKg < minWeight || newKg > 350)
             {
                 return;
             }

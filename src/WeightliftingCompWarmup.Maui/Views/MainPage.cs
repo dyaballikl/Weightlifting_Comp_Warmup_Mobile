@@ -23,6 +23,7 @@ public class MainPage : ContentPage
     private readonly MainViewModel _vm;
     private IDispatcherTimer? _timer;
     private DateTime _lastUiTimerTickUtc;
+    private DateTime _lastUpdateCheckUtc;
     private bool _isWideLayout;
     private bool _isShortHeight;
     private bool _layoutInitialized;
@@ -42,6 +43,7 @@ public class MainPage : ContentPage
     private TaskCompletionSource<string?>? _activePromptTcs;
     private readonly ContentView _headerContainer;
     private readonly ContentView _bannerContainer;
+    private readonly ContentView _toastOverlayHost;
     private readonly ContentView _bodyContainer;
     private readonly List<Layout> _activeBindableLayouts = new();
     private ScrollView? _liveStepsScrollView;
@@ -49,7 +51,6 @@ public class MainPage : ContentPage
     private int _scrollRequestVersion;
 
     private Button? _beepHeaderBtn;
-    private Button? _themeHeaderBtn;
     private Button? _snatchHeaderBtn;
     private Button? _cjHeaderBtn;
     private Button? _setupHeaderBtn;
@@ -69,8 +70,7 @@ public class MainPage : ContentPage
         {
             RowDefinitions =
             {
-                new RowDefinition { Height = GridLength.Auto }, // Top App Header + Profile + Discipline + Mode Bar
-                new RowDefinition { Height = GridLength.Auto }, // Optional Toast/Status Banner
+                new RowDefinition { Height = GridLength.Auto }, // Top App Header + Optional Update Banner
                 new RowDefinition { Height = GridLength.Star }  // Responsive Body (Phone or Tablet)
             },
             Padding = new Thickness(8, 6, 8, 6),
@@ -79,16 +79,36 @@ public class MainPage : ContentPage
 
         _headerContainer = new ContentView();
         _bannerContainer = new ContentView();
+        _bannerContainer.SetBinding(IsVisibleProperty, nameof(MainViewModel.HasUpdateBanner));
         _bodyContainer = new ContentView();
 
         _headerContainer.Content = BuildTopNavigationHeader();
-        _bannerContainer.Content = BuildBannersStack();
+        _bannerContainer.Content = BuildUpdateAvailableBanner();
         RebuildBodyLayout();
         _layoutInitialized = true;
 
-        _rootGrid.Add(_headerContainer, 0, 0);
-        _rootGrid.Add(_bannerContainer, 0, 1);
-        _rootGrid.Add(_bodyContainer, 0, 2);
+        var topStack = new VerticalStackLayout
+        {
+            Spacing = 6,
+            Children =
+            {
+                _headerContainer,
+                _bannerContainer
+            }
+        };
+
+        _rootGrid.Add(topStack, 0, 0);
+        _rootGrid.Add(_bodyContainer, 0, 1);
+
+        _toastOverlayHost = new ContentView
+        {
+            VerticalOptions = LayoutOptions.End,
+            HorizontalOptions = LayoutOptions.Fill,
+            Margin = new Thickness(10, 0, 10, 12),
+            ZIndex = 50,
+            Content = BuildStatusBanner()
+        };
+        _toastOverlayHost.SetBinding(IsVisibleProperty, nameof(MainViewModel.HasStatusBanner));
 
         _promptOverlayHost = new Grid
         {
@@ -101,6 +121,7 @@ public class MainPage : ContentPage
 
         _pageRootHost = new Grid();
         _pageRootHost.Add(_rootGrid);
+        _pageRootHost.Add(_toastOverlayHost);
         _pageRootHost.Add(_promptOverlayHost);
         _pageRootHost.Add(_pipOverlayHost);
 
@@ -112,19 +133,6 @@ public class MainPage : ContentPage
         DevicePlatformService.BackgroundOverlayTick += HandleUiTimerTick;
     }
 
-    private View BuildBannersStack()
-    {
-        return new VerticalStackLayout
-        {
-            Spacing = 6,
-            Children =
-            {
-                BuildUpdateAvailableBanner(),
-                BuildStatusBanner()
-            }
-        };
-    }
-
     private void OnAppThemeChanged()
     {
         Dispatcher.Dispatch(() =>
@@ -133,7 +141,8 @@ public class MainPage : ContentPage
             _promptOverlayHost.BackgroundColor = AppThemeManager.Color("#B3020617");
             RefreshPipMiniTimerOverlayTheme();
             _headerContainer.Content = BuildTopNavigationHeader();
-            _bannerContainer.Content = BuildBannersStack();
+            _bannerContainer.Content = BuildUpdateAvailableBanner();
+            _toastOverlayHost.Content = BuildStatusBanner();
             if (_layoutInitialized)
             {
                 RebuildBodyLayout();
@@ -370,6 +379,7 @@ public class MainPage : ContentPage
 
         if (choice == "CONFIRMED")
         {
+            _vm.StopLiveTimer(clearPersistedState: true);
             _vm.IsLiveMode = false;
 #if ANDROID
             Microsoft.Maui.ApplicationModel.Platform.CurrentActivity?.Finish();
@@ -397,13 +407,7 @@ public class MainPage : ContentPage
             if (!_vm.HasSeenWelcomeHelp)
             {
                 _vm.MarkWelcomeHelpSeen(HelpAboutModalPage.AppVersion);
-                Dispatcher.Dispatch(async () =>
-                {
-                    if (Navigation.ModalStack.Count == 0)
-                    {
-                        await Navigation.PushModalAsync(new HelpAboutModalPage(startOnAboutTab: false, onSelectTheme: pref => _vm.SetThemePreference(pref)), animated: true);
-                    }
-                });
+                Dispatcher.Dispatch(async () => await OpenMenuModalAsync(AppMenuTab.Help));
             }
             else
             {
@@ -426,12 +430,22 @@ public class MainPage : ContentPage
         CheckForAppUpdate();
     }
 
+    public void OnAppBackgrounded()
+    {
+        _vm.PersistLiveSessionIfActive();
+    }
+
     public void CheckForAppUpdate()
     {
         RefreshSystemClockFormat();
         if (!_isInPipMode)
         {
-            _ = _vm.CheckForUpdateOnOpenAsync(HelpAboutModalPage.AppVersion);
+            DateTime nowUtc = DateTime.UtcNow;
+            if (_lastUpdateCheckUtc == default || (nowUtc - _lastUpdateCheckUtc).TotalMinutes >= 30)
+            {
+                _lastUpdateCheckUtc = nowUtc;
+                _ = _vm.CheckForUpdateOnOpenAsync(HelpAboutModalPage.AppVersion);
+            }
         }
     }
 
@@ -509,8 +523,7 @@ public class MainPage : ContentPage
     {
         if (e.PropertyName is nameof(MainViewModel.BeepOnNextLift)
             or nameof(MainViewModel.SelectedLiftType)
-            or nameof(MainViewModel.IsLiveMode)
-            or nameof(MainViewModel.ThemePreference))
+            or nameof(MainViewModel.IsLiveMode))
         {
             UpdateHeaderVisualState();
         }
@@ -538,6 +551,13 @@ public class MainPage : ContentPage
         {
             try
             {
+                foreach (var child in layout.Children)
+                {
+                    if (child is BindableObject bo)
+                    {
+                        bo.BindingContext = null;
+                    }
+                }
                 layout.RemoveBinding(BindableLayout.ItemsSourceProperty);
                 BindableLayout.SetItemsSource(layout, null);
             }
@@ -628,7 +648,10 @@ public class MainPage : ContentPage
 
                 if (!isFullyInView)
                 {
-                    await scroll.ScrollToAsync(activeElement, ScrollToPosition.Center, animated);
+                    var scrollPos = viewportHeight < (activeElement.Height * 2.4)
+                        ? ScrollToPosition.Start
+                        : ScrollToPosition.Center;
+                    await scroll.ScrollToAsync(activeElement, scrollPos, animated);
                 }
             }
             catch
@@ -658,7 +681,7 @@ public class MainPage : ContentPage
             HeightRequest = (rowHeight * 2) + rowSpacing
         };
 
-        // Row 1: Active Profile Button + Global Settings (Bar Weight + Beep + Theme + Help/About)
+        // Row 1: Active Profile Button + Global Quick Controls (Bar Weight + Beep + Menu ☰)
         var topRow = new Grid
         {
             RowDefinitions =
@@ -670,10 +693,9 @@ public class MainPage : ContentPage
                 new ColumnDefinition { Width = GridLength.Star },
                 new ColumnDefinition { Width = GridLength.Auto },
                 new ColumnDefinition { Width = GridLength.Auto },
-                new ColumnDefinition { Width = GridLength.Auto },
                 new ColumnDefinition { Width = GridLength.Auto }
             },
-            ColumnSpacing = compact ? 4 : 8,
+            ColumnSpacing = compact ? 5 : 8,
             HeightRequest = rowHeight
         };
 
@@ -686,7 +708,7 @@ public class MainPage : ContentPage
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 12 : 13,
             CornerRadius = 8,
-            Padding = compact ? new Thickness(4, 2) : new Thickness(12, 6),
+            Padding = compact ? new Thickness(8, 2) : new Thickness(12, 6),
             HeightRequest = rowHeight,
             HorizontalOptions = compact ? LayoutOptions.Fill : LayoutOptions.Start
         };
@@ -702,7 +724,7 @@ public class MainPage : ContentPage
             FontSize = compact ? 11.5 : 12,
             FontAttributes = FontAttributes.Bold,
             CornerRadius = 8,
-            Padding = compact ? new Thickness(6, 2) : new Thickness(10, 6),
+            Padding = compact ? new Thickness(8, 2) : new Thickness(10, 6),
             HeightRequest = rowHeight
         };
         barBtn.SetBinding(Button.TextProperty, new Binding(nameof(MainViewModel.BarbellWeight), stringFormat: compact ? "🏋️ {0}kg" : "🏋️ Bar: {0}kg"));
@@ -715,46 +737,31 @@ public class MainPage : ContentPage
             BorderWidth = 1,
             FontSize = compact ? 11.5 : 12,
             CornerRadius = 8,
-            Padding = compact ? new Thickness(6, 2) : new Thickness(10, 6),
+            Padding = compact ? new Thickness(8, 2) : new Thickness(10, 6),
             HeightRequest = rowHeight
         };
         beepBtn.Clicked += (_, _) => _vm.BeepOnNextLift = !_vm.BeepOnNextLift;
         _beepHeaderBtn = beepBtn;
 
-        var themeBtn = new Button
+        var menuBtn = new Button
         {
-            BackgroundColor = AppThemeManager.Color("#0F172A"),
-            BorderColor = AppThemeManager.Color("#475569"),
-            BorderWidth = 1,
-            FontSize = compact ? 11.5 : 12,
-            FontAttributes = FontAttributes.Bold,
-            CornerRadius = 8,
-            Padding = compact ? new Thickness(6, 2) : new Thickness(10, 6),
-            HeightRequest = rowHeight,
-            Command = _vm.CycleThemeCommand
-        };
-        _themeHeaderBtn = themeBtn;
-
-        var helpBtn = new Button
-        {
-            Text = compact ? "❓" : "❓ Help",
+            Text = compact ? "☰" : "☰ Menu",
             BackgroundColor = AppThemeManager.Color("#0F172A"),
             BorderColor = AppThemeManager.Color("#38BDF8"),
             BorderWidth = 1,
             TextColor = AppThemeManager.Color("#38BDF8"),
             FontAttributes = FontAttributes.Bold,
-            FontSize = compact ? 11.5 : 12,
+            FontSize = compact ? 15 : 12.5,
             CornerRadius = 8,
-            Padding = compact ? new Thickness(7, 2) : new Thickness(10, 6),
+            Padding = compact ? new Thickness(10, 0) : new Thickness(12, 6),
             HeightRequest = rowHeight
         };
-        helpBtn.Clicked += OnHelpAboutClicked;
+        menuBtn.Clicked += OnSettingsMenuClicked;
 
         topRow.Add(profileBtn, 0, 0);
         topRow.Add(barBtn, 1, 0);
         topRow.Add(beepBtn, 2, 0);
-        topRow.Add(themeBtn, 3, 0);
-        topRow.Add(helpBtn, 4, 0);
+        topRow.Add(menuBtn, 3, 0);
 
         // Row 2: Discipline Selector (SNATCH vs CLEAN & JERK) + Mode Selector (SETUP vs LIVE)
         var navRow = new Grid
@@ -816,19 +823,6 @@ public class MainPage : ContentPage
             _beepHeaderBtn.BackgroundColor = AppThemeManager.Color("#0F172A");
             _beepHeaderBtn.TextColor = _vm.BeepOnNextLift ? AppThemeManager.Color("#4ADE80") : AppThemeManager.Color("#94A3B8");
             _beepHeaderBtn.BorderColor = _vm.BeepOnNextLift ? AppThemeManager.Color("#22C55E") : AppThemeManager.Color("#475569");
-        }
-
-        if (_themeHeaderBtn != null)
-        {
-            _themeHeaderBtn.Text = _vm.ThemePreference switch
-            {
-                "Dark" => compact ? "🌙 Dark" : "🌙 Theme: Dark",
-                "Light" => compact ? "☀️ Light" : "☀️ Theme: Light",
-                _ => compact ? "🌓 Auto" : "🌓 Theme: Auto"
-            };
-            _themeHeaderBtn.BackgroundColor = AppThemeManager.Color("#0F172A");
-            _themeHeaderBtn.TextColor = AppThemeManager.Color("#E2E8F0");
-            _themeHeaderBtn.BorderColor = AppThemeManager.Color("#475569");
         }
 
         if (_snatchHeaderBtn != null)
@@ -920,9 +914,16 @@ public class MainPage : ContentPage
         {
             BackgroundColor = AppThemeManager.Color("#0C4A6E"),
             Stroke = AppThemeManager.Color("#38BDF8"),
-            StrokeThickness = 1,
-            StrokeShape = new RoundRectangle { CornerRadius = 8 },
-            Padding = new Thickness(12, 6)
+            StrokeThickness = 1.5,
+            StrokeShape = new RoundRectangle { CornerRadius = 10 },
+            Padding = new Thickness(12, 7),
+            Shadow = new Shadow
+            {
+                Brush = Colors.Black,
+                Offset = new Point(0, 3),
+                Radius = 10,
+                Opacity = 0.45f
+            }
         };
         border.SetBinding(IsVisibleProperty, nameof(MainViewModel.HasStatusBanner));
 
@@ -1481,12 +1482,12 @@ public class MainPage : ContentPage
             {
                 new ColumnDefinition { Width = new GridLength(compact ? 18 : 28) },
                 new ColumnDefinition { Width = GridLength.Star },
-                new ColumnDefinition { Width = new GridLength(compact ? 44 : 64) },
-                new ColumnDefinition { Width = new GridLength(compact ? 58 : 92) },
-                new ColumnDefinition { Width = new GridLength(compact ? 40 : 62) },
-                new ColumnDefinition { Width = new GridLength(compact ? 44 : 68) }
+                new ColumnDefinition { Width = new GridLength(compact ? 42 : 64) },
+                new ColumnDefinition { Width = new GridLength(compact ? 52 : 92) },
+                new ColumnDefinition { Width = new GridLength(compact ? 38 : 62) },
+                new ColumnDefinition { Width = new GridLength(compact ? 56 : 74) }
             },
-            ColumnSpacing = compact ? 4 : 6,
+            ColumnSpacing = compact ? 3 : 6,
             Padding = compact ? new Thickness(7, 4) : new Thickness(9, 5),
             BackgroundColor = AppThemeManager.Color("#0F172A")
         };
@@ -1518,12 +1519,12 @@ public class MainPage : ContentPage
                 {
                     new ColumnDefinition { Width = new GridLength(compact ? 18 : 28) },
                     new ColumnDefinition { Width = GridLength.Star },
-                    new ColumnDefinition { Width = new GridLength(compact ? 44 : 64) },
-                    new ColumnDefinition { Width = new GridLength(compact ? 58 : 92) },
-                    new ColumnDefinition { Width = new GridLength(compact ? 40 : 62) },
-                    new ColumnDefinition { Width = new GridLength(compact ? 44 : 68) }
+                    new ColumnDefinition { Width = new GridLength(compact ? 42 : 64) },
+                    new ColumnDefinition { Width = new GridLength(compact ? 52 : 92) },
+                    new ColumnDefinition { Width = new GridLength(compact ? 38 : 62) },
+                    new ColumnDefinition { Width = new GridLength(compact ? 56 : 74) }
                 },
-                ColumnSpacing = compact ? 4 : 6
+                ColumnSpacing = compact ? 3 : 6
             };
 
             var orderLbl = new Label
@@ -1561,7 +1562,9 @@ public class MainPage : ContentPage
                 TextColor = AppThemeManager.Color("#FACC15"),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = compact ? 11.5 : 13,
-                VerticalTextAlignment = TextAlignment.Center
+                VerticalTextAlignment = TextAlignment.Center,
+                MaxLines = 1,
+                LineBreakMode = LineBreakMode.NoWrap
             };
             weightLbl.SetBinding(Label.TextProperty, nameof(SetupStepItemViewModel.WeightDisplay));
 
@@ -1570,7 +1573,7 @@ public class MainPage : ContentPage
                 IsOpener = false,
                 IsFullBarbell = false,
                 HeightRequest = compact ? 26 : 34,
-                WidthRequest = compact ? 56 : 88,
+                WidthRequest = compact ? 50 : 88,
                 HorizontalOptions = LayoutOptions.Start,
                 VerticalOptions = LayoutOptions.Center
             };
@@ -1581,16 +1584,20 @@ public class MainPage : ContentPage
             var lengthLbl = new Label
             {
                 TextColor = AppThemeManager.Color("#38BDF8"),
-                FontSize = compact ? 11 : 12,
-                VerticalTextAlignment = TextAlignment.Center
+                FontSize = compact ? 10 : 12,
+                VerticalTextAlignment = TextAlignment.Center,
+                MaxLines = 1,
+                LineBreakMode = LineBreakMode.NoWrap
             };
             lengthLbl.SetBinding(Label.TextProperty, nameof(SetupStepItemViewModel.FormattedLength));
 
             var totalLbl = new Label
             {
                 TextColor = AppThemeManager.Color("#94A3B8"),
-                FontSize = compact ? 11 : 12,
-                VerticalTextAlignment = TextAlignment.Center
+                FontSize = compact ? 10 : 12,
+                VerticalTextAlignment = TextAlignment.Center,
+                MaxLines = 1,
+                LineBreakMode = LineBreakMode.NoWrap
             };
             totalLbl.SetBinding(Label.TextProperty, nameof(SetupStepItemViewModel.FormattedTotalLength));
 
@@ -2285,6 +2292,56 @@ public class MainPage : ContentPage
         clocksGrid.Add(BuildTelemetryPill("TIME TO OPENER", nameof(MainViewModel.LiveTimeToOpen), "#FACC15", compact), 2, 0);
         stack.Add(clocksGrid);
 
+        // One-tap Snatch -> C&J Break Transition Banner (visible once Snatch opener is reached)
+        if (_vm.IsSnatchSelected)
+        {
+            var transitionBanner = new Border
+            {
+                BackgroundColor = AppThemeManager.Color("#064E3B"),
+                Stroke = AppThemeManager.Color("#10B981"),
+                StrokeThickness = 1.5,
+                StrokeShape = new RoundRectangle { CornerRadius = 8 },
+                Padding = new Thickness(8, 6)
+            };
+            transitionBanner.SetBinding(IsVisibleProperty, nameof(MainViewModel.ShowTransitionToCjBreakBanner));
+
+            var transGrid = new Grid
+            {
+                ColumnDefinitions =
+                {
+                    new ColumnDefinition { Width = GridLength.Star },
+                    new ColumnDefinition { Width = GridLength.Auto }
+                },
+                ColumnSpacing = 8
+            };
+            transGrid.Add(new Label
+            {
+                Text = "🏁 Snatch opener reached — ready for Clean & Jerk?",
+                TextColor = AppThemeManager.Color("#A7F3D0"),
+                FontAttributes = FontAttributes.Bold,
+                FontSize = compact ? 11 : 12,
+                VerticalTextAlignment = TextAlignment.Center,
+                LineBreakMode = LineBreakMode.WordWrap
+            }, 0, 0);
+
+            var startCjBtn = new Button
+            {
+                Text = compact ? "→ C&J Break" : "→ Start C&J Break",
+                Command = _vm.TransitionToCjBreakCommand,
+                BackgroundColor = Color.FromArgb("#16A34A"),
+                TextColor = Colors.White,
+                FontAttributes = FontAttributes.Bold,
+                FontSize = compact ? 11 : 12,
+                CornerRadius = 6,
+                Padding = new Thickness(10, 0),
+                HeightRequest = 30,
+                VerticalOptions = LayoutOptions.Center
+            };
+            transGrid.Add(startCjBtn, 1, 0);
+            transitionBanner.Content = transGrid;
+            stack.Add(transitionBanner);
+        }
+
         // Row 2 (Snatch Only): Competition Start Countdown + Force Start Now Button
         if (_vm.IsSnatchSelected)
         {
@@ -2388,10 +2445,11 @@ public class MainPage : ContentPage
 
             var snBreakProgress = new ScrubbableProgressBar
             {
-                HeightRequest = compact ? 22 : 28,
-                FillColorHex = "#EAB308",
+                HeightRequest = compact ? 30 : 32,
+                FillColorHex = "#D97706",
                 ScrubCommand = _vm.ScrubCjBreakProgressCommand
             };
+            snBreakProgress.SetBinding(ScrubbableProgressBar.FillColorHexProperty, nameof(MainViewModel.BreakFillColorHex));
             snBreakProgress.SetBinding(ScrubbableProgressBar.ProgressProperty, nameof(MainViewModel.LiveCjBreakProgress));
             snBreakProgress.SetBinding(ScrubbableProgressBar.OverlayTextProperty, new Binding(nameof(MainViewModel.LiveCjBreakRemainingDisplay), stringFormat: "Clock Remaining: {0}"));
 
@@ -2517,7 +2575,7 @@ public class MainPage : ContentPage
 
             var snatchProgress = new ScrubbableProgressBar
             {
-                HeightRequest = compact ? 22 : 28,
+                HeightRequest = compact ? 30 : 32,
                 FillColorHex = "#0284C7",
                 ScrubCommand = _vm.ScrubCjSnatchProgressCommand
             };
@@ -2624,10 +2682,11 @@ public class MainPage : ContentPage
 
             var breakProgress = new ScrubbableProgressBar
             {
-                HeightRequest = compact ? 22 : 28,
-                FillColorHex = "#EAB308",
+                HeightRequest = compact ? 30 : 32,
+                FillColorHex = "#D97706",
                 ScrubCommand = _vm.ScrubCjBreakProgressCommand
             };
+            breakProgress.SetBinding(ScrubbableProgressBar.FillColorHexProperty, nameof(MainViewModel.BreakFillColorHex));
             breakProgress.SetBinding(ScrubbableProgressBar.ProgressProperty, nameof(MainViewModel.LiveCjBreakProgress));
             breakProgress.SetBinding(ScrubbableProgressBar.OverlayTextProperty, new Binding(nameof(MainViewModel.LiveCjBreakRemainingDisplay), stringFormat: "Break Remaining: {0}"));
 
@@ -2769,33 +2828,122 @@ public class MainPage : ContentPage
 
         var stageProgressBar = new ScrubbableProgressBar
         {
-            HeightRequest = compact ? 28 : 36,
+            HeightRequest = compact ? 32 : 36,
             FillColorHex = "#22C55E",
             ScrubCommand = _vm.ScrubStageProgressCommand
         };
         stageProgressBar.SetBinding(ScrubbableProgressBar.ProgressProperty, nameof(MainViewModel.LiveStageProgress));
         stageProgressBar.SetBinding(ScrubbableProgressBar.OverlayTextProperty, nameof(MainViewModel.LiveStageStatusText));
 
+        var advanceActionGrid = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Auto }
+            },
+            ColumnSpacing = compact ? 6 : 8
+        };
+
         var advanceBtn = new Button
         {
             Command = _vm.AdvanceStageLiftCommand,
             TextColor = Colors.White,
             FontAttributes = FontAttributes.Bold,
-            FontSize = compact ? 13 : 15,
+            FontSize = compact ? 12.5 : 15,
             CornerRadius = 8,
             Padding = new Thickness(8, 0),
-            HeightRequest = compact ? 40 : 48
+            HeightRequest = compact ? 42 : 48
         };
         advanceBtn.SetBinding(
             Button.TextProperty,
             compact ? nameof(MainViewModel.AdvanceStageLiftButtonTextPhone) : nameof(MainViewModel.AdvanceStageLiftButtonTextTablet));
         advanceBtn.SetBinding(Button.BackgroundColorProperty, nameof(MainViewModel.NextLiftButtonColor));
 
+        var addOneMinBtn = new Button
+        {
+            Text = compact ? "+1m ⏱" : "+1m (2-Min Clock)",
+            Command = _vm.AddOneMinuteCurrentStageLiftCommand,
+            BackgroundColor = Color.FromArgb("#B45309"),
+            TextColor = Colors.White,
+            FontAttributes = FontAttributes.Bold,
+            FontSize = compact ? 12 : 12.5,
+            CornerRadius = 8,
+            Padding = new Thickness(compact ? 10 : 14, 0),
+            HeightRequest = compact ? 42 : 48
+        };
+        addOneMinBtn.SetBinding(IsEnabledProperty, nameof(MainViewModel.CanAddOneMinuteBonus));
+        addOneMinBtn.Triggers.Add(new DataTrigger(typeof(Button))
+        {
+            Binding = new Binding(nameof(MainViewModel.CanAddOneMinuteBonus)),
+            Value = false,
+            Setters =
+            {
+                new Setter { Property = OpacityProperty, Value = 0.42 }
+            }
+        });
+
+        advanceActionGrid.Add(advanceBtn, 0, 0);
+        advanceActionGrid.Add(addOneMinBtn, 1, 0);
+
         stageStack.Add(liftsOutRow);
         stageStack.Add(stageProgressBar);
-        stageStack.Add(advanceBtn);
+        stageStack.Add(advanceActionGrid);
         stageBorder.Content = stageStack;
         stack.Add(stageBorder);
+
+        // Row 3b: Inline Live Opener Quick-Edit + Undo Last Live Action
+        var liveToolsRow = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Auto }
+            },
+            ColumnSpacing = compact ? 6 : 8
+        };
+
+        var liveOpenerBtn = new Button
+        {
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            BorderColor = AppThemeManager.Color("#F59E0B"),
+            BorderWidth = 1,
+            TextColor = AppThemeManager.Color("#FACC15"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = compact ? 11.5 : 12.5,
+            CornerRadius = 6,
+            Padding = new Thickness(10, 0),
+            HeightRequest = compact ? 30 : 34
+        };
+        liveOpenerBtn.SetBinding(Button.TextProperty, new Binding(nameof(MainViewModel.OpenerWeight), stringFormat: "🎯 Opener: {0} kg ✏️"));
+        liveOpenerBtn.Clicked += OnEditLiveOpenerWeightClicked;
+
+        var undoBtn = new Button
+        {
+            Command = _vm.UndoLiveActionCommand,
+            BackgroundColor = AppThemeManager.NeutralButtonBackground,
+            TextColor = AppThemeManager.NeutralButtonText,
+            FontAttributes = FontAttributes.Bold,
+            FontSize = compact ? 11 : 12,
+            CornerRadius = 6,
+            Padding = new Thickness(compact ? 10 : 12, 0),
+            HeightRequest = compact ? 30 : 34
+        };
+        undoBtn.SetBinding(Button.TextProperty, nameof(MainViewModel.LiveUndoButtonText));
+        undoBtn.SetBinding(IsEnabledProperty, nameof(MainViewModel.CanUndoLiveAction));
+        undoBtn.Triggers.Add(new DataTrigger(typeof(Button))
+        {
+            Binding = new Binding(nameof(MainViewModel.CanUndoLiveAction)),
+            Value = false,
+            Setters =
+            {
+                new Setter { Property = OpacityProperty, Value = 0.42 }
+            }
+        });
+
+        liveToolsRow.Add(liveOpenerBtn, 0, 0);
+        liveToolsRow.Add(undoBtn, 1, 0);
+        stack.Add(liveToolsRow);
 
         // Row 4: Timer Pause/Resume, Reset Session, and Auto-Advance (Training Only) Toggle
         var footerRow = new Grid
@@ -2877,6 +3025,16 @@ public class MainPage : ContentPage
             RowSpacing = compact ? 4 : 6
         };
 
+        var headerRow = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Auto }
+            },
+            ColumnSpacing = 8
+        };
+
         var header = new Label
         {
             Text = compact
@@ -2886,9 +3044,26 @@ public class MainPage : ContentPage
             FontAttributes = FontAttributes.Bold,
             FontSize = compact ? 11 : 12,
             MaxLines = 1,
-            LineBreakMode = LineBreakMode.TailTruncation
+            LineBreakMode = LineBreakMode.TailTruncation,
+            VerticalTextAlignment = TextAlignment.Center
         };
-        outerGrid.Add(header, 0, 0);
+
+        var upNextLbl = new Label
+        {
+            TextColor = AppThemeManager.Color("#FACC15"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = compact ? 10.5 : 12,
+            MaxLines = 1,
+            LineBreakMode = LineBreakMode.TailTruncation,
+            HorizontalTextAlignment = TextAlignment.End,
+            VerticalTextAlignment = TextAlignment.Center
+        };
+        upNextLbl.SetBinding(Label.TextProperty, nameof(MainViewModel.LiveNextStepText));
+        upNextLbl.SetBinding(IsVisibleProperty, nameof(MainViewModel.HasLiveNextStep));
+
+        headerRow.Add(header, 0, 0);
+        headerRow.Add(upNextLbl, 1, 0);
+        outerGrid.Add(headerRow, 0, 0);
 
         var stepsStack = new VerticalStackLayout
         {
@@ -3090,7 +3265,9 @@ public class MainPage : ContentPage
             vmItemHandler = (_, e) =>
             {
                 if (e.PropertyName is nameof(LiveStepItemViewModel.Status)
-                    or nameof(LiveStepItemViewModel.RowBackgroundHex))
+                    or nameof(LiveStepItemViewModel.RowBackgroundHex)
+                    or nameof(LiveStepItemViewModel.IsFinalTenSeconds)
+                    or nameof(LiveStepItemViewModel.BadgeBackgroundHex))
                 {
                     ApplyRowColors(subscribedVmItem);
                 }
@@ -3153,10 +3330,7 @@ public class MainPage : ContentPage
             "➕ Add New Profile...",
             "📋 Duplicate Current Profile...",
             "✏️ Rename Current Profile...",
-            "📤 Export Backup (.json)...",
-            "📥 Import Backup (.json)...",
-            "🗑️ Delete Current Profile",
-            "⚠️ Clear All Settings (Reset to Demo)");
+            "🗑️ Delete Current Profile");
 
         if (string.IsNullOrEmpty(action) || action == "Cancel")
         {
@@ -3225,14 +3399,6 @@ public class MainPage : ContentPage
                 }
             }
         }
-        else if (action.StartsWith("📤"))
-        {
-            await ExportProfilesBackupAsync();
-        }
-        else if (action.StartsWith("📥"))
-        {
-            await ImportProfilesBackupAsync();
-        }
         else if (action.StartsWith("🗑️"))
         {
             bool confirm = await DisplayAlertAsync(
@@ -3245,23 +3411,28 @@ public class MainPage : ContentPage
                 _vm.DeleteCurrentProfile();
             }
         }
-        else if (action.StartsWith("⚠️"))
+    }
+
+    private Page GetTopDialogHostPage() => Navigation.ModalStack.LastOrDefault() ?? this;
+
+    private async Task ConfirmResetAllSettingsAsync()
+    {
+        var host = GetTopDialogHostPage();
+        bool confirm = await host.DisplayAlertAsync(
+            "Clear All Settings",
+            "This will delete all saved profiles and restore the initial 'Demo Profile'. Continue?",
+            "Reset All",
+            "Cancel");
+        if (confirm)
         {
-            bool confirm = await DisplayAlertAsync(
-                "Clear All Settings",
-                "This will delete all saved profiles and restore the initial 'Demo Profile'. Continue?",
-                "Reset All",
-                "Cancel");
-            if (confirm)
-            {
-                _vm.ResetAllSettingsToDemo();
-            }
+            _vm.ResetAllSettingsToDemo();
         }
     }
 
     private async Task ExportProfilesBackupAsync()
     {
-        bool proceed = await DisplayAlertAsync(
+        var host = GetTopDialogHostPage();
+        bool proceed = await host.DisplayAlertAsync(
             "Export Profiles Backup (.json)",
             "This creates a JSON backup of all your Comp OWL profiles and settings.\n\n💡 Tip: Save or upload this file to Google Drive so your profiles are safely backed up in the cloud and easy to restore on any device.",
             "Export & Share...",
@@ -3287,12 +3458,13 @@ public class MainPage : ContentPage
         }
         catch (Exception ex)
         {
-            await DisplayAlertAsync("Export Failed", $"Could not export backup file: {ex.Message}", "OK");
+            await host.DisplayAlertAsync("Export Failed", $"Could not export backup file: {ex.Message}", "OK");
         }
     }
 
     private async Task ImportProfilesBackupAsync()
     {
+        var host = GetTopDialogHostPage();
         try
         {
             var result = await FilePicker.Default.PickAsync(new PickOptions
@@ -3312,27 +3484,56 @@ public class MainPage : ContentPage
             var (ok, err, count) = _vm.ImportProfilesBackupJson(json);
             if (!ok)
             {
-                await DisplayAlertAsync("Cannot Import Backup", err ?? "Invalid backup file.", "OK");
+                await host.DisplayAlertAsync("Cannot Import Backup", err ?? "Invalid backup file.", "OK");
                 return;
             }
 
-            await DisplayAlertAsync(
+            await host.DisplayAlertAsync(
                 "Backup Imported",
                 $"Successfully imported {count} profile(s).\nActive profile: {_vm.ActiveProfileName}",
                 "OK");
         }
         catch (Exception ex)
         {
-            await DisplayAlertAsync("Import Failed", $"Could not read backup file: {ex.Message}", "OK");
+            await host.DisplayAlertAsync("Import Failed", $"Could not read backup file: {ex.Message}", "OK");
         }
     }
 
-    private async void OnHelpAboutClicked(object? sender, EventArgs e)
+    private async Task OpenMenuModalAsync(AppMenuTab initialTab)
     {
-        _vm.MarkWelcomeHelpSeen();
         if (Navigation.ModalStack.Count == 0)
         {
-            await Navigation.PushModalAsync(new HelpAboutModalPage(startOnAboutTab: false, onSelectTheme: pref => _vm.SetThemePreference(pref)), animated: true);
+            await Navigation.PushModalAsync(
+                new HelpAboutModalPage(
+                    initialTab: initialTab,
+                    viewModel: _vm,
+                    onSelectTheme: pref => _vm.SetThemePreference(pref),
+                    onExportBackup: ExportProfilesBackupAsync,
+                    onImportBackup: ImportProfilesBackupAsync,
+                    onResetAllSettings: ConfirmResetAllSettingsAsync),
+                animated: true);
+        }
+    }
+
+    private async void OnSettingsMenuClicked(object? sender, EventArgs e)
+    {
+        _vm.MarkWelcomeHelpSeen();
+        await OpenMenuModalAsync(AppMenuTab.Settings);
+    }
+
+    private async void OnEditLiveOpenerWeightClicked(object? sender, EventArgs e)
+    {
+        string? res = await ShowInputPromptAsync(
+            $"Update Live {_vm.CurrentLiftTitle} Opener",
+            $"Enter updated opener weight in whole kg ({_vm.BarbellWeight}–{Defaults.MaxOpenerWeight}). Warmup steps recalculate immediately while keeping your active timer:",
+            "Update",
+            "Cancel",
+            initialValue: _vm.OpenerWeight.ToString(),
+            keyboard: Keyboard.Numeric);
+
+        if (int.TryParse(res, out int val))
+        {
+            _vm.SetOpenerWeightForDiscipline(_vm.SelectedLiftType, val);
         }
     }
 
@@ -3544,7 +3745,7 @@ public class MainPage : ContentPage
     {
         string? res = await ShowInputPromptAsync(
             $"Duration: {item.Action}",
-            "Enter duration in seconds (1–3600):",
+            "Enter duration in seconds (1–7200):",
             "Save",
             "Cancel",
             initialValue: item.Length.ToString(),
@@ -3576,7 +3777,7 @@ public class MainPage : ContentPage
     {
         string? res = await ShowInputPromptAsync(
             $"Jump from {rule.FromWeight} kg",
-            $"Enter weight jump in kg (1–{Defaults.MaxOpenerWeight}):",
+            "Enter weight jump in whole kg (1–100):",
             "Save",
             "Cancel",
             initialValue: rule.Jump.ToString(),
@@ -3608,7 +3809,7 @@ public class MainPage : ContentPage
     {
         string? res = await ShowInputPromptAsync(
             $"Rest Interval from {rule.FromWeight} kg",
-            "Enter rest interval in seconds (1–3600):",
+            "Enter rest interval in seconds (5–3600):",
             "Save",
             "Cancel",
             initialValue: rule.Seconds.ToString(),

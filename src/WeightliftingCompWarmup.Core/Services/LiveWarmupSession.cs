@@ -29,7 +29,32 @@ public record LiveStepStatus(
     int ElapsedSeconds,
     int DurationSeconds,
     string CountdownBadgeText,
-    string ProgressSummaryText);
+    string ProgressSummaryText,
+    bool HasPresentationBuffer = false,
+    int PresentationBufferSeconds = 0,
+    bool IsFinalTenSeconds = false);
+
+/// <summary>
+/// Serializable snapshot of live session counters used to recover an active warmup timer
+/// if the OS terminates the app in the background (e.g., while opening the camera app).
+/// </summary>
+public class PersistedLiveSessionState
+{
+    public string ProfileName { get; set; } = string.Empty;
+    public LiftType LiftType { get; set; }
+    public bool IsRunning { get; set; }
+    public bool AutoAdvance { get; set; }
+    public bool ForceCompetitionStarted { get; set; }
+    public int LiftsOut { get; set; }
+    public int LiftsPassed { get; set; }
+    public int StageLiftElapsed { get; set; }
+    public int CurrentStageLiftBonusSeconds { get; set; }
+    public int CjSnatchLiftsOut { get; set; }
+    public int CjSnatchStageElapsed { get; set; }
+    public int CjBreakElapsed { get; set; }
+    public int CjBreakMaximum { get; set; }
+    public DateTime SavedUtc { get; set; }
+}
 
 /// <summary>
 /// Complete telemetry snapshot produced on each tick or user interaction in the Live Warmup Runner.
@@ -66,7 +91,12 @@ public record LiveSessionSnapshot(
     bool IsBreakActive,
     int ActiveStepOrder,
     bool TriggerBeep,
-    IReadOnlyList<LiveStepStatus> Steps);
+    IReadOnlyList<LiveStepStatus> Steps,
+    bool CanUndo = false,
+    string NextUndoActionLabel = "",
+    int CurrentStageLiftBonusSeconds = 0,
+    bool IsStageFinalTenSeconds = false,
+    string NextStepPreviewText = "");
 
 /// <summary>
 /// Stateful engine for running either Snatch LIVE or Clean &amp; Jerk LIVE warmup sessions.
@@ -101,19 +131,42 @@ public class LiveWarmupSession
 
     private readonly Profile _profile;
     private readonly List<WarmupStep> _steps;
+    private readonly List<UndoCheckpoint> _undoHistory = new();
+    private const int MaxUndoHistory = 10;
+    private DateTime _lastScrubCheckpointUtc;
     private int _previousActiveStepOrder = -1;
     private bool _forceCompetitionStarted;
+
+    private readonly record struct UndoCheckpoint(
+        string ActionLabel,
+        bool ForceCompetitionStarted,
+        int LiftsOut,
+        int LiftsPassed,
+        int StageLiftElapsed,
+        int CurrentStageLiftBonusSeconds,
+        int CjSnatchLiftsOut,
+        int CjSnatchStageElapsed,
+        int CjBreakElapsed,
+        int CjBreakMaximum,
+        int OpenerWeightKg);
 
     public LiftType LiftType { get; }
     public bool IsRunning { get; set; }
     public bool AutoAdvance { get; set; }
     public bool BeepEnabled { get; set; }
+    public bool CanUndo => _undoHistory.Count > 0;
+    public int UndoHistoryCount => _undoHistory.Count;
+    public string NextUndoActionLabel => _undoHistory.Count > 0 ? _undoHistory[^1].ActionLabel : string.Empty;
+    public string LastUndoneActionLabel { get; private set; } = string.Empty;
+    public int CurrentOpenerWeightKg => LiftType == LiftType.Snatch ? _profile.SnatchOpenerWeight : _profile.CjOpenerWeight;
 
     // Shared stage lift tracking
     public int LiftsOut { get; private set; }
     public int LiftsPassed { get; private set; }
     public int StageLiftElapsed { get; private set; }
-    public int StageLiftMaximum { get; private set; }
+    public int BaseStageLiftMaximum { get; private set; }
+    public int CurrentStageLiftBonusSeconds { get; private set; }
+    public int StageLiftMaximum => BaseStageLiftMaximum + CurrentStageLiftBonusSeconds;
 
     // Clean & Jerk specific phase tracking
     public int CjSnatchLiftsOut { get; private set; }
@@ -139,7 +192,8 @@ public class LiveWarmupSession
             LiftsOut = Math.Clamp(_profile.SnatchLiftsOut, 0, 99);
             LiftsPassed = 0;
             StageLiftElapsed = 0;
-            StageLiftMaximum = Math.Max(1, _profile.SnatchSecondsStage);
+            BaseStageLiftMaximum = Math.Max(1, _profile.SnatchSecondsStage);
+            CurrentStageLiftBonusSeconds = 0;
         }
         else
         {
@@ -153,8 +207,168 @@ public class LiveWarmupSession
             LiftsOut = Math.Clamp(_profile.CjLiftsOut, 0, 99);
             LiftsPassed = 0;
             StageLiftElapsed = 0;
-            StageLiftMaximum = Math.Max(1, _profile.CjSecondsStage);
+            BaseStageLiftMaximum = Math.Max(1, _profile.CjSecondsStage);
+            CurrentStageLiftBonusSeconds = 0;
         }
+    }
+
+    private void PushUndoCheckpoint(string actionLabel, bool isScrub = false)
+    {
+        if (isScrub)
+        {
+            DateTime utcNow = DateTime.UtcNow;
+            if (_undoHistory.Count > 0 &&
+                _undoHistory[^1].ActionLabel == actionLabel &&
+                (utcNow - _lastScrubCheckpointUtc).TotalSeconds < 1.5)
+            {
+                return;
+            }
+            _lastScrubCheckpointUtc = utcNow;
+        }
+        else
+        {
+            _lastScrubCheckpointUtc = default;
+        }
+
+        _undoHistory.Add(new UndoCheckpoint(
+            actionLabel,
+            _forceCompetitionStarted,
+            LiftsOut,
+            LiftsPassed,
+            StageLiftElapsed,
+            CurrentStageLiftBonusSeconds,
+            CjSnatchLiftsOut,
+            CjSnatchStageElapsed,
+            CjBreakElapsed,
+            CjBreakMaximum,
+            CurrentOpenerWeightKg));
+
+        if (_undoHistory.Count > MaxUndoHistory)
+        {
+            _undoHistory.RemoveAt(0);
+        }
+    }
+
+    /// <summary>
+    /// Reverts the most recent manual stage advance, Lifts Out edit, +1m extension, opener change, or scrub action.
+    /// </summary>
+    public LiveSessionSnapshot Undo(DateTime? now = null)
+    {
+        if (_undoHistory.Count > 0)
+        {
+            var prev = _undoHistory[^1];
+            _undoHistory.RemoveAt(_undoHistory.Count - 1);
+
+            LastUndoneActionLabel = prev.ActionLabel;
+            _forceCompetitionStarted = prev.ForceCompetitionStarted;
+            LiftsOut = prev.LiftsOut;
+            LiftsPassed = prev.LiftsPassed;
+            StageLiftElapsed = prev.StageLiftElapsed;
+            CurrentStageLiftBonusSeconds = prev.CurrentStageLiftBonusSeconds;
+            CjSnatchLiftsOut = prev.CjSnatchLiftsOut;
+            CjSnatchStageElapsed = prev.CjSnatchStageElapsed;
+            CjBreakElapsed = prev.CjBreakElapsed;
+            CjBreakMaximum = prev.CjBreakMaximum;
+
+            if (prev.OpenerWeightKg != CurrentOpenerWeightKg)
+            {
+                if (LiftType == LiftType.Snatch)
+                {
+                    _profile.SnatchOpenerWeight = prev.OpenerWeightKg;
+                }
+                else
+                {
+                    _profile.CjOpenerWeight = prev.OpenerWeightKg;
+                }
+
+                _steps.Clear();
+                _steps.AddRange(WarmupCalculator.BuildLiveSteps(LiftType, _profile));
+            }
+        }
+        else
+        {
+            LastUndoneActionLabel = string.Empty;
+        }
+
+        return CreateSnapshot(now ?? DateTime.Now, advanceClocks: false);
+    }
+
+    /// <summary>
+    /// Extends only the currently active stage lift clock by <paramref name="bonusSeconds"/> (default +60s for a 2-minute self-follow clock)
+    /// without altering <see cref="LiftsOut"/>. Automatically resets to 0 when the lift advances.
+    /// </summary>
+    public LiveSessionSnapshot AddCurrentStageLiftBonusSeconds(int bonusSeconds = 60, DateTime? now = null)
+    {
+        if (bonusSeconds <= 0)
+        {
+            return CreateSnapshot(now ?? DateTime.Now, advanceClocks: false);
+        }
+
+        int nextBonus = Math.Clamp(CurrentStageLiftBonusSeconds + bonusSeconds, 0, 300);
+        if (nextBonus == CurrentStageLiftBonusSeconds)
+        {
+            return CreateSnapshot(now ?? DateTime.Now, advanceClocks: false);
+        }
+
+        PushUndoCheckpoint("+1m");
+        CurrentStageLiftBonusSeconds = nextBonus;
+        return CreateSnapshot(now ?? DateTime.Now, advanceClocks: false);
+    }
+
+    /// <summary>
+    /// Exports a serializable snapshot of mutable live counters so an active warmup can be recovered
+    /// if the OS terminates the app in the background.
+    /// </summary>
+    public PersistedLiveSessionState ExportPersistedState(string profileName, DateTime utcNow)
+    {
+        return new PersistedLiveSessionState
+        {
+            ProfileName = profileName,
+            LiftType = LiftType,
+            IsRunning = IsRunning,
+            AutoAdvance = AutoAdvance,
+            ForceCompetitionStarted = _forceCompetitionStarted,
+            LiftsOut = LiftsOut,
+            LiftsPassed = LiftsPassed,
+            StageLiftElapsed = StageLiftElapsed,
+            CurrentStageLiftBonusSeconds = CurrentStageLiftBonusSeconds,
+            CjSnatchLiftsOut = CjSnatchLiftsOut,
+            CjSnatchStageElapsed = CjSnatchStageElapsed,
+            CjBreakElapsed = CjBreakElapsed,
+            CjBreakMaximum = CjBreakMaximum,
+            SavedUtc = utcNow
+        };
+    }
+
+    /// <summary>
+    /// Restores mutable live counters from a previously saved state and applies elapsed wall-clock catch-up ticks if it was running.
+    /// </summary>
+    public LiveSessionSnapshot RestorePersistedState(PersistedLiveSessionState state, DateTime nowLocal, DateTime nowUtc)
+    {
+        _undoHistory.Clear();
+        _forceCompetitionStarted = state.ForceCompetitionStarted;
+        LiftsOut = Math.Clamp(state.LiftsOut, 0, 99);
+        LiftsPassed = Math.Clamp(state.LiftsPassed, 0, 999);
+        CurrentStageLiftBonusSeconds = Math.Clamp(state.CurrentStageLiftBonusSeconds, 0, 300);
+        StageLiftElapsed = Math.Clamp(state.StageLiftElapsed, 0, StageLiftMaximum);
+        CjSnatchLiftsOut = Math.Clamp(state.CjSnatchLiftsOut, 0, 99);
+        CjSnatchStageElapsed = Math.Clamp(state.CjSnatchStageElapsed, 0, CjSnatchStageMaximum);
+        CjBreakMaximum = Math.Max(LiftType == LiftType.Snatch ? 0 : 1, state.CjBreakMaximum);
+        CjBreakElapsed = Math.Clamp(state.CjBreakElapsed, 0, CjBreakMaximum);
+        AutoAdvance = state.AutoAdvance;
+        IsRunning = state.IsRunning;
+
+        if (state.IsRunning && state.SavedUtc != default)
+        {
+            int elapsedSec = Math.Clamp((int)Math.Round((nowUtc - state.SavedUtc).TotalSeconds), 0, 7200);
+            for (int i = 0; i < elapsedSec; i++)
+            {
+                DateTime steppedLocal = nowLocal.AddSeconds(-(elapsedSec - 1 - i));
+                CreateSnapshot(steppedLocal, advanceClocks: true);
+            }
+        }
+
+        return CreateSnapshot(nowLocal, advanceClocks: false);
     }
 
     /// <summary>
@@ -169,11 +383,13 @@ public class LiveWarmupSession
         if (LiftType == LiftType.CleanAndJerk)
         {
             bool wasBreakOrSnatchActive = CjSnatchLiftsOut > 0 || CjBreakElapsed < CjBreakMaximum;
+            PushUndoCheckpoint(wasBreakOrSnatchActive ? "Skip Break" : "Advance");
 
             CjSnatchLiftsOut = 0;
             CjSnatchStageElapsed = CjSnatchStageMaximum;
             CjBreakElapsed = CjBreakMaximum;
             StageLiftElapsed = 0;
+            CurrentStageLiftBonusSeconds = 0;
 
             if (!wasBreakOrSnatchActive && LiftsOut > 0)
             {
@@ -187,10 +403,12 @@ public class LiveWarmupSession
         DateTime startToday = currentNow.Date.Add(_profile.Start.TimeOfDay);
         bool wasPreStageActive = (!_forceCompetitionStarted && (int)Math.Round((startToday - currentNow).TotalSeconds) > 0)
                                  || CjBreakElapsed < CjBreakMaximum;
+        PushUndoCheckpoint(wasPreStageActive ? "Skip Clock" : "Advance");
 
         _forceCompetitionStarted = true;
         CjBreakElapsed = CjBreakMaximum;
         StageLiftElapsed = 0;
+        CurrentStageLiftBonusSeconds = 0;
 
         if (!wasPreStageActive && LiftsOut > 0)
         {
@@ -209,6 +427,7 @@ public class LiveWarmupSession
     {
         if (LiftType == LiftType.CleanAndJerk && CjSnatchLiftsOut > 0)
         {
+            PushUndoCheckpoint("Next Snatch");
             CjSnatchLiftsOut--;
             CjSnatchStageElapsed = 0;
         }
@@ -223,6 +442,12 @@ public class LiveWarmupSession
     public LiveSessionSnapshot UpdateOpenerWeight(int newOpenerWeightKg, DateTime? now = null)
     {
         int clamped = Math.Clamp(newOpenerWeightKg, _profile.BarbellWeight, Defaults.MaxOpenerWeight);
+        if (clamped == CurrentOpenerWeightKg)
+        {
+            return CreateSnapshot(now ?? DateTime.Now, advanceClocks: false);
+        }
+
+        PushUndoCheckpoint("Opener");
         if (LiftType == LiftType.Snatch)
         {
             _profile.SnatchOpenerWeight = clamped;
@@ -243,9 +468,16 @@ public class LiveWarmupSession
     /// </summary>
     public LiveSessionSnapshot SetLiftsOut(int liftsOut, DateTime? now = null)
     {
-        LiftsOut = Math.Clamp(liftsOut, 0, 99);
+        int clamped = Math.Clamp(liftsOut, 0, 99);
+        if (clamped != LiftsOut)
+        {
+            PushUndoCheckpoint("Lifts Out");
+            LiftsOut = clamped;
+        }
+
         if (LiftsOut == 0)
         {
+            CurrentStageLiftBonusSeconds = 0;
             StageLiftElapsed = StageLiftMaximum;
         }
         else if (StageLiftElapsed >= StageLiftMaximum)
@@ -270,6 +502,9 @@ public class LiveWarmupSession
         int? remainingSnatchLifts = null,
         DateTime? now = null)
     {
+        PushUndoCheckpoint("Board Scan");
+        CurrentStageLiftBonusSeconds = 0;
+
         if (liftsOut.HasValue)
         {
             LiftsOut = Math.Clamp(liftsOut.Value, 0, 99);
@@ -345,7 +580,13 @@ public class LiveWarmupSession
         if (LiftType == LiftType.CleanAndJerk)
         {
             int previous = CjSnatchLiftsOut;
-            CjSnatchLiftsOut = Math.Clamp(snatchLiftsOut, 0, 99);
+            int clamped = Math.Clamp(snatchLiftsOut, 0, 99);
+            if (clamped != previous)
+            {
+                PushUndoCheckpoint("Snatch Left");
+            }
+
+            CjSnatchLiftsOut = clamped;
             if (CjSnatchLiftsOut > 0)
             {
                 if (previous == 0)
@@ -354,6 +595,7 @@ public class LiveWarmupSession
                 }
                 CjBreakElapsed = 0;
                 StageLiftElapsed = 0;
+                CurrentStageLiftBonusSeconds = 0;
             }
             else
             {
@@ -370,6 +612,7 @@ public class LiveWarmupSession
     /// </summary>
     public LiveSessionSnapshot ScrubStageLiftProgress(double fraction, DateTime? now = null)
     {
+        PushUndoCheckpoint("Stage Scrub", isScrub: true);
         fraction = Math.Clamp(fraction, 0.0, 1.0);
         StageLiftElapsed = (int)Math.Round(fraction * StageLiftMaximum);
 
@@ -395,6 +638,7 @@ public class LiveWarmupSession
     {
         if (LiftType == LiftType.CleanAndJerk && CjSnatchLiftsOut > 0)
         {
+            PushUndoCheckpoint("Snatch Scrub", isScrub: true);
             fraction = Math.Clamp(fraction, 0.0, 1.0);
             CjSnatchStageElapsed = (int)Math.Round(fraction * CjSnatchStageMaximum);
         }
@@ -407,6 +651,7 @@ public class LiveWarmupSession
     /// </summary>
     public LiveSessionSnapshot ScrubCjBreakProgress(double fraction, DateTime? now = null)
     {
+        PushUndoCheckpoint("Break Scrub", isScrub: true);
         fraction = Math.Clamp(fraction, 0.0, 1.0);
         if (LiftType == LiftType.CleanAndJerk)
         {
@@ -420,6 +665,7 @@ public class LiveWarmupSession
 
         CjBreakElapsed = (int)Math.Round(fraction * CjBreakMaximum);
         StageLiftElapsed = 0;
+        CurrentStageLiftBonusSeconds = 0;
 
         return CreateSnapshot(now ?? DateTime.Now, advanceClocks: false);
     }
@@ -430,6 +676,7 @@ public class LiveWarmupSession
     /// </summary>
     public LiveSessionSnapshot SetCjBreakRemainingSeconds(int remainingSeconds, DateTime? now = null)
     {
+        PushUndoCheckpoint("Break Time");
         if (LiftType == LiftType.CleanAndJerk)
         {
             CjSnatchLiftsOut = 0;
@@ -448,6 +695,7 @@ public class LiveWarmupSession
 
         CjBreakElapsed = Math.Clamp(CjBreakMaximum - remainingSeconds, 0, CjBreakMaximum);
         StageLiftElapsed = 0;
+        CurrentStageLiftBonusSeconds = 0;
 
         return CreateSnapshot(now ?? DateTime.Now, advanceClocks: false);
     }
@@ -457,7 +705,11 @@ public class LiveWarmupSession
     /// </summary>
     public LiveSessionSnapshot ForceStartStageNow(DateTime? now = null)
     {
-        _forceCompetitionStarted = true;
+        if (!_forceCompetitionStarted)
+        {
+            PushUndoCheckpoint("Start Now");
+            _forceCompetitionStarted = true;
+        }
         return CreateSnapshot(now ?? DateTime.Now, advanceClocks: false);
     }
 
@@ -527,6 +779,7 @@ public class LiveWarmupSession
                                 LiftsOut--;
                                 LiftsPassed++;
                                 StageLiftElapsed = 0;
+                                CurrentStageLiftBonusSeconds = 0;
                             }
                         }
                         else
@@ -537,6 +790,7 @@ public class LiveWarmupSession
 
                     if (LiftsOut == 0)
                     {
+                        CurrentStageLiftBonusSeconds = 0;
                         StageLiftElapsed = StageLiftMaximum;
                         isNextLiftHighlighted = false;
                     }
@@ -548,7 +802,7 @@ public class LiveWarmupSession
 
                 int breakRemaining = Math.Max(0, CjBreakMaximum - CjBreakElapsed);
                 int snStageRemaining = LiftsOut > 0
-                    ? (LiftsOut - 1) * StageLiftMaximum + (StageLiftMaximum - StageLiftElapsed)
+                    ? (LiftsOut - 1) * BaseStageLiftMaximum + Math.Max(0, StageLiftMaximum - StageLiftElapsed)
                     : 0;
                 secondsToOpen = Math.Max(0, breakRemaining + snStageRemaining);
             }
@@ -561,7 +815,7 @@ public class LiveWarmupSession
                 StageLiftElapsed = 0;
                 int breakRemaining = Math.Max(0, CjBreakMaximum - CjBreakElapsed);
                 int snStageRemaining = LiftsOut > 0
-                    ? (LiftsOut - 1) * StageLiftMaximum + (StageLiftMaximum - StageLiftElapsed)
+                    ? (LiftsOut - 1) * BaseStageLiftMaximum + Math.Max(0, StageLiftMaximum - StageLiftElapsed)
                     : 0;
                 secondsToOpen = secondsToStart + breakRemaining + snStageRemaining;
             }
@@ -624,6 +878,7 @@ public class LiveWarmupSession
                             LiftsOut--;
                             LiftsPassed++;
                             StageLiftElapsed = 0;
+                            CurrentStageLiftBonusSeconds = 0;
                         }
                     }
                     else
@@ -639,12 +894,13 @@ public class LiveWarmupSession
 
             if (LiftsOut == 0)
             {
+                CurrentStageLiftBonusSeconds = 0;
                 StageLiftElapsed = StageLiftMaximum;
                 isNextLiftHighlighted = false;
             }
 
             int cjStageRemaining = LiftsOut > 0
-                ? (LiftsOut - 1) * StageLiftMaximum + (StageLiftMaximum - StageLiftElapsed)
+                ? (LiftsOut - 1) * BaseStageLiftMaximum + Math.Max(0, StageLiftMaximum - StageLiftElapsed)
                 : 0;
             int breakRemaining = Math.Max(0, CjBreakMaximum - CjBreakElapsed);
             int snatchRemaining = CjSnatchLiftsOut > 0
@@ -688,8 +944,9 @@ public class LiveWarmupSession
 
         _previousActiveStepOrder = activeStepOrder;
 
-        var stepStatuses = new List<LiveStepStatus>(_steps.Count);
-        foreach (var step in _steps.OrderBy(s => s.Order))
+        var orderedSteps = _steps.OrderBy(s => s.Order).ToList();
+        var stepStatuses = new List<LiveStepStatus>(orderedSteps.Count);
+        foreach (var step in orderedSteps)
         {
             StepRunStatus status;
             double progressFraction;
@@ -698,6 +955,10 @@ public class LiveWarmupSession
             string badgeText;
             string detailText;
             string progressSummaryText;
+            bool isFinalTen = false;
+            string presTag = step.HasPresentationBuffer && step.PresentationBufferSeconds > 0
+                ? $" • 🎤 +{WarmupCalculator.FormatSeconds(step.PresentationBufferSeconds)}"
+                : string.Empty;
 
             if (step.Order == activeStepOrder)
             {
@@ -707,11 +968,12 @@ public class LiveWarmupSession
                 elapsedSeconds = Math.Clamp(durationSeconds - stepRemaining, 0, durationSeconds);
                 progressFraction = durationSeconds > 0 ? (double)elapsedSeconds / durationSeconds : 1.0;
                 badgeText = step.IsOpener ? "OPEN NOW!" : WarmupCalculator.FormatSeconds(stepRemaining);
+                isFinalTen = !step.IsOpener && stepRemaining > 0 && stepRemaining <= 10;
                 detailText = step.PreStep
                     ? "Wait until warmup starts"
                     : step.IsOpener
                         ? step.Action
-                        : $"{step.FormattedLength} • Active Now";
+                        : $"{step.FormattedLength}{presTag} • Active Now";
 
                 if (step.IsOpener)
                 {
@@ -731,7 +993,7 @@ public class LiveWarmupSession
                 badgeText = $"in {WarmupCalculator.FormatSeconds(startsIn)}";
                 detailText = step.PreStep || step.IsOpener
                     ? $"from {step.FormattedTotalLengthReverse} out"
-                    : $"{step.FormattedLength} (from {step.FormattedTotalLengthReverse} out)";
+                    : $"{step.FormattedLength}{presTag} (from {step.FormattedTotalLengthReverse} out)";
                 progressSummaryText = string.Empty;
             }
             else
@@ -740,7 +1002,7 @@ public class LiveWarmupSession
                 elapsedSeconds = durationSeconds;
                 progressFraction = 1.0;
                 badgeText = "Done";
-                detailText = step.PreStep || step.IsOpener ? "Completed" : $"{step.FormattedLength} • Completed";
+                detailText = step.PreStep || step.IsOpener ? "Completed" : $"{step.FormattedLength}{presTag} • Completed";
                 progressSummaryText = string.Empty;
             }
 
@@ -757,13 +1019,19 @@ public class LiveWarmupSession
                 ElapsedSeconds: elapsedSeconds,
                 DurationSeconds: durationSeconds,
                 CountdownBadgeText: badgeText,
-                ProgressSummaryText: progressSummaryText));
+                ProgressSummaryText: progressSummaryText,
+                HasPresentationBuffer: step.HasPresentationBuffer,
+                PresentationBufferSeconds: step.PresentationBufferSeconds,
+                IsFinalTenSeconds: isFinalTen));
         }
 
         double stageProgress = StageLiftMaximum > 0 ? (double)StageLiftElapsed / StageLiftMaximum : 0.0;
         int stageRemainingSec = Math.Max(0, StageLiftMaximum - StageLiftElapsed);
+        string bonusSuffix = CurrentStageLiftBonusSeconds > 0
+            ? $" (+{CurrentStageLiftBonusSeconds}s)"
+            : string.Empty;
         string stageStatusText = LiftsOut > 0
-            ? $"{StageLiftElapsed}s / {StageLiftMaximum}s ({stageRemainingSec}s left)"
+            ? $"{StageLiftElapsed}s / {StageLiftMaximum}s{bonusSuffix} ({stageRemainingSec}s left)"
             : "Stage Complete";
 
         double cjSnatchProgress = CjSnatchStageMaximum > 0 ? (double)CjSnatchStageElapsed / CjSnatchStageMaximum : 1.0;
@@ -777,6 +1045,30 @@ public class LiveWarmupSession
         bool isStageLiftingStarted = LiftType == LiftType.Snatch
             ? (hasCompetitionStarted && CjBreakElapsed >= CjBreakMaximum)
             : (CjSnatchLiftsOut == 0 && CjBreakElapsed >= CjBreakMaximum);
+        bool isStageFinalTen = isStageLiftingStarted && LiftsOut > 0 && stageRemainingSec <= 10;
+
+        // Build concise "Next:" preview text for the active step / floating mini-timer
+        var nextStep = orderedSteps.FirstOrDefault(s => s.Order > activeStepOrder);
+        string nextStepPreview = string.Empty;
+        if (nextStep != null)
+        {
+            if (nextStep.IsOpener)
+            {
+                nextStepPreview = $"Next: OPEN at {nextStep.Weight} kg";
+            }
+            else if (nextStep.IsLift && nextStep.Weight > 0)
+            {
+                var currentStep = orderedSteps.FirstOrDefault(s => s.Order == activeStepOrder);
+                string jumpSuffix = (currentStep != null && currentStep.IsLift && currentStep.Weight > 0 && nextStep.Weight > currentStep.Weight)
+                    ? $" (+{nextStep.Weight - currentStep.Weight} kg)"
+                    : string.Empty;
+                nextStepPreview = $"Next: {nextStep.Weight} kg{jumpSuffix}";
+            }
+            else
+            {
+                nextStepPreview = $"Next: {nextStep.Action}";
+            }
+        }
 
         return new LiveSessionSnapshot(
             LiftType: LiftType,
@@ -810,6 +1102,11 @@ public class LiveWarmupSession
             IsBreakActive: isBreakActive,
             ActiveStepOrder: activeStepOrder,
             TriggerBeep: triggerBeep,
-            Steps: stepStatuses);
+            Steps: stepStatuses,
+            CanUndo: CanUndo,
+            NextUndoActionLabel: NextUndoActionLabel,
+            CurrentStageLiftBonusSeconds: CurrentStageLiftBonusSeconds,
+            IsStageFinalTenSeconds: isStageFinalTen,
+            NextStepPreviewText: nextStepPreview);
     }
 }

@@ -270,9 +270,33 @@ public static class AppThemeManager
             // Gold / Amber accents on light cards
             "#FBBF24" => "#B45309", // Amber 700 text on light surface
             "#FACC15" => "#B45309", // Amber 700 text/accent on light surface
+            "#FDE68A" => "#92400E", // Amber 800 text on light surface
+            "#F59E0B" => "#D97706", // Amber 600 border/accent on light surface
+            "#451A03" => "#FEF3C7", // Amber 100 warning/badge background
 
-            // Green status text on light cards
+            // Green / Emerald status colors on light cards
             "#4ADE80" => "#15803D", // Green 700 text on light surface
+            "#86EFAC" => "#166534", // Green 800 status text
+            "#A7F3D0" => "#065F46", // Emerald 800 text
+            "#D1FAE5" => "#047857", // Emerald 700 secondary text
+            "#0F291E" => "#DCFCE7", // Green 100 status banner background
+            "#064E3B" => "#DCFCE7", // Emerald 100 card/badge background
+
+            // Red / Error / Excluded colors on light cards
+            "#FCA5A5" => "#B91C1C", // Red 700 text on light surface
+            "#F87171" => "#DC2626", // Red 600 text on light surface
+            "#450A0A" => "#FEE2E2", // Red 100 error banner background
+            "#1A1118" => "#FEF2F2", // Red 50 excluded row background
+            "#2A1215" => "#FEE2E2", // Red 100 excluded banner background
+            "#7F1D1D" => "#DC2626", // Red 600 destructive button/border
+
+            // Purple / Projected attempt accent on light cards
+            "#C084FC" => "#7E22CE", // Purple 700 projected text
+
+            // Scanner User Row & Image Frame
+            "#0C2D48" => "#E0F2FE", // Sky 100 user row highlight
+            "#1E3A8A" => "#93C5FD", // Blue 300 subtle border
+            "#090D16" => "#E2E8F0", // Slate 200 image preview backdrop
 
             // Update Banner
             "#422006" => "#FEF3C7", // Amber 100 banner background

@@ -12,6 +12,7 @@ public class SavedAppState
     public bool HasSeenWelcomeHelp { get; set; }
     public string? LastSeenAppVersion { get; set; }
     public string ThemePreference { get; set; } = "System";
+    public bool? ReplaceAutoOneKgAfterMake { get; set; }
     public List<Profile> Profiles { get; set; } = new();
 }
 
@@ -26,6 +27,8 @@ public class ProfileStorageService
     public const string ThemeLight = "Light";
 
     private readonly string _storageFilePath;
+    private readonly string _backupFilePath;
+    private readonly string _liveSessionFilePath;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -38,6 +41,7 @@ public class ProfileStorageService
     public bool HasSeenWelcomeHelp { get; private set; }
     public string? LastSeenAppVersion { get; private set; }
     public string ThemePreference { get; private set; } = "System";
+    public bool ReplaceAutoOneKgAfterMake { get; private set; } = true;
 
     public ProfileStorageService(string? storageFilePath = null)
     {
@@ -57,18 +61,28 @@ public class ProfileStorageService
             }
             _storageFilePath = storageFilePath;
         }
+
+        _backupFilePath = _storageFilePath + ".bak";
+        string storageDir = Path.GetDirectoryName(_storageFilePath) ?? ".";
+        _liveSessionFilePath = Path.Combine(storageDir, "live_session_state.json");
     }
 
     /// <summary>
-    /// Loads all saved profiles from disk, or initializes with "Demo Profile" if none exist.
+    /// Loads all saved profiles from disk (falling back to the automatic .bak copy if the primary file
+    /// was corrupted mid-write), or initializes with "Demo Profile" if none exist.
     /// </summary>
     public Profile Load()
     {
-        try
+        foreach (string candidatePath in new[] { _storageFilePath, _backupFilePath })
         {
-            if (File.Exists(_storageFilePath))
+            try
             {
-                string json = File.ReadAllText(_storageFilePath);
+                if (!File.Exists(candidatePath))
+                {
+                    continue;
+                }
+
+                string json = File.ReadAllText(candidatePath);
                 var state = JsonSerializer.Deserialize<SavedAppState>(json, JsonOptions);
                 if (state != null && state.Profiles.Count > 0)
                 {
@@ -82,16 +96,24 @@ public class ProfileStorageService
                         ? state.LastSeenAppVersion.Trim()
                         : (state.HasSeenWelcomeHelp ? AppChangelog.LegacyBaselineVersion : null);
                     ThemePreference = NormalizeThemePreference(state.ThemePreference);
+                    ReplaceAutoOneKgAfterMake = state.ReplaceAutoOneKgAfterMake ?? true;
                     ActiveProfile = Profiles.FirstOrDefault(p =>
                         string.Equals(p.Name, state.LastUsedProfileName, StringComparison.OrdinalIgnoreCase))
                         ?? Profiles[0];
+
+                    // If we recovered from the backup file, immediately restore the primary file
+                    if (candidatePath == _backupFilePath)
+                    {
+                        Save();
+                    }
+
                     return ActiveProfile;
                 }
             }
-        }
-        catch
-        {
-            // Fall back to Demo Profile if file is corrupted or unreadable
+            catch
+            {
+                // Try backup file or fall back to Demo Profile
+            }
         }
 
         return ResetAllSettings();
@@ -192,7 +214,20 @@ public class ProfileStorageService
     }
 
     /// <summary>
-    /// Saves all profiles and the currently active profile name to disk.
+    /// Sets and persists the AI Scoreboard Scanner preference for replacing automatic +1 kg board placeholders
+    /// with projected S-curve jumps.
+    /// </summary>
+    public void SetReplaceAutoOneKgAfterMake(bool value)
+    {
+        if (ReplaceAutoOneKgAfterMake != value)
+        {
+            ReplaceAutoOneKgAfterMake = value;
+            Save();
+        }
+    }
+
+    /// <summary>
+    /// Saves all profiles and the currently active profile name to disk atomically (with a .bak fallback copy).
     /// </summary>
     public void Save()
     {
@@ -203,11 +238,107 @@ public class ProfileStorageService
             HasSeenWelcomeHelp = HasSeenWelcomeHelp,
             LastSeenAppVersion = LastSeenAppVersion,
             ThemePreference = ThemePreference,
+            ReplaceAutoOneKgAfterMake = ReplaceAutoOneKgAfterMake,
             Profiles = Profiles
         };
 
         string json = JsonSerializer.Serialize(state, JsonOptions);
-        File.WriteAllText(_storageFilePath, json);
+        WriteFileAtomically(_storageFilePath, _backupFilePath, json);
+    }
+
+    /// <summary>
+    /// Persists active live warmup state so the timer can recover if the OS kills the app in the background.
+    /// </summary>
+    public void SaveLiveSessionState(PersistedLiveSessionState state)
+    {
+        try
+        {
+            string json = JsonSerializer.Serialize(state, JsonOptions);
+            WriteFileAtomically(_liveSessionFilePath, backupPath: null, json);
+        }
+        catch
+        {
+            // Ignore transient live session persistence errors
+        }
+    }
+
+    /// <summary>
+    /// Loads a recently persisted live session state (within the last 6 hours), or null if none is active.
+    /// </summary>
+    public PersistedLiveSessionState? LoadLiveSessionState(DateTime? nowUtc = null)
+    {
+        try
+        {
+            if (!File.Exists(_liveSessionFilePath))
+            {
+                return null;
+            }
+
+            string json = File.ReadAllText(_liveSessionFilePath);
+            var state = JsonSerializer.Deserialize<PersistedLiveSessionState>(json, JsonOptions);
+            if (state == null || state.SavedUtc == default)
+            {
+                return null;
+            }
+
+            DateTime currentUtc = nowUtc ?? DateTime.UtcNow;
+            double ageHours = (currentUtc - state.SavedUtc).TotalHours;
+            if (ageHours < -1.0 || ageHours > 6.0)
+            {
+                ClearLiveSessionState();
+                return null;
+            }
+
+            return state;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Clears any persisted live session recovery file.
+    /// </summary>
+    public void ClearLiveSessionState()
+    {
+        try
+        {
+            if (File.Exists(_liveSessionFilePath))
+            {
+                File.Delete(_liveSessionFilePath);
+            }
+        }
+        catch
+        {
+            // Ignore cleanup errors
+        }
+    }
+
+    private static void WriteFileAtomically(string targetPath, string? backupPath, string content)
+    {
+        string? dir = Path.GetDirectoryName(targetPath);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        string tempPath = targetPath + ".tmp";
+        File.WriteAllText(tempPath, content);
+
+        if (!string.IsNullOrWhiteSpace(backupPath) && File.Exists(targetPath))
+        {
+            try
+            {
+                File.Copy(targetPath, backupPath, overwrite: true);
+            }
+            catch
+            {
+                // Best-effort backup copy
+            }
+        }
+
+        File.Move(tempPath, targetPath, overwrite: true);
     }
 
     /// <summary>
@@ -226,6 +357,7 @@ public class ProfileStorageService
             HasSeenWelcomeHelp = HasSeenWelcomeHelp,
             LastSeenAppVersion = LastSeenAppVersion,
             ThemePreference = ThemePreference,
+            ReplaceAutoOneKgAfterMake = ReplaceAutoOneKgAfterMake,
             Profiles = Profiles
         };
 
@@ -275,6 +407,11 @@ public class ProfileStorageService
             if (!string.IsNullOrWhiteSpace(state.ThemePreference))
             {
                 ThemePreference = NormalizeThemePreference(state.ThemePreference);
+            }
+
+            if (state.ReplaceAutoOneKgAfterMake.HasValue)
+            {
+                ReplaceAutoOneKgAfterMake = state.ReplaceAutoOneKgAfterMake.Value;
             }
 
             ActiveProfile = Profiles.FirstOrDefault(p =>
@@ -405,6 +542,8 @@ public class ProfileStorageService
         Profiles = new List<Profile> { demo };
         ActiveProfile = demo;
         ThemePreference = "System";
+        ReplaceAutoOneKgAfterMake = true;
+        ClearLiveSessionState();
         Save();
         return ActiveProfile;
     }

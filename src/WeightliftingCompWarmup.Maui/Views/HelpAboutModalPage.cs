@@ -10,44 +10,85 @@ using Microsoft.Maui.Devices;
 using Microsoft.Maui.Graphics;
 using WeightliftingCompWarmup.Core.Services;
 using WeightliftingCompWarmup.Maui.Services;
+using WeightliftingCompWarmup.Maui.ViewModels;
 
 namespace WeightliftingCompWarmup.Maui.Views;
 
 /// <summary>
-/// Modal page providing a tabbed "How to Use (Help)" guide and "About Comp OWL" screen,
-/// plus a tri-mode Appearance switch (System / Dark / Light).
-/// Automatically shown on first launch and accessible anytime via the '?' header button.
+/// Active tab in the unified Settings, Help &amp; About modal.
+/// </summary>
+public enum AppMenuTab
+{
+    Settings,
+    Help,
+    About
+}
+
+/// <summary>
+/// Unified 3-tab modal providing App Settings (Theme, Audio, Gemini API Key, Scanner defaults,
+/// Android Floating Timer permissions, Backups/Reset), "How to Use (Help)" guide, and "About Comp OWL".
+/// Automatically opens to Help on first launch and opens to Settings from the top header menu button (☰).
 /// </summary>
 public class HelpAboutModalPage : ContentPage
 {
     private ContentView _tabContentContainer = null!;
+    private Button _settingsTabBtn = null!;
     private Button _helpTabBtn = null!;
     private Button _aboutTabBtn = null!;
-    private bool _isAboutTabSelected;
+    private AppMenuTab _selectedTab;
+    private readonly MainViewModel? _viewModel;
     private readonly Action<string>? _onSelectTheme;
+    private readonly Func<Task>? _onExportBackup;
+    private readonly Func<Task>? _onImportBackup;
+    private readonly Func<Task>? _onResetAllSettings;
+    private readonly GeminiScoreboardVisionService _visionService = new();
     private readonly HashSet<string> _expandedHelpSections = new(StringComparer.Ordinal);
+    private bool _isApiInstructionsExpanded;
+    private string _apiKeyStatusText = string.Empty;
+    private bool _apiKeyStatusIsError;
+    private bool _isTestingApiKey;
 
     public const string AppShortName = "Comp OWL";
     public const string AppFullName = "Weightlifting Comp Warmup";
-    public const string AppVersion = "2.0.45";
-    public const string AppBuild = "47";
+    public const string AppVersion = "2.0.46";
+    public const string AppBuild = "49";
     public const string AppleAppStoreId = ""; // Populate with numeric App Store Connect ID once created
 
-    public HelpAboutModalPage(bool startOnAboutTab = false, Action<string>? onSelectTheme = null)
+    public HelpAboutModalPage(
+        AppMenuTab initialTab = AppMenuTab.Settings,
+        MainViewModel? viewModel = null,
+        Action<string>? onSelectTheme = null,
+        Func<Task>? onExportBackup = null,
+        Func<Task>? onImportBackup = null,
+        Func<Task>? onResetAllSettings = null)
     {
-        Title = $"{AppShortName} — Help & About";
+        Title = $"{AppShortName} — Settings, Help & About";
         NavigationPage.SetHasNavigationBar(this, false);
 
-        _isAboutTabSelected = startOnAboutTab;
-        _onSelectTheme = onSelectTheme;
+        _selectedTab = initialTab;
+        _viewModel = viewModel;
+        _onSelectTheme = onSelectTheme ?? (viewModel != null ? pref => viewModel.SetThemePreference(pref) : null);
+        _onExportBackup = onExportBackup;
+        _onImportBackup = onImportBackup;
+        _onResetAllSettings = onResetAllSettings;
+        _isApiInstructionsExpanded = !_visionService.HasApiKey();
 
         BuildModalLayout();
+    }
+
+    public HelpAboutModalPage(bool startOnAboutTab, Action<string>? onSelectTheme = null)
+        : this(startOnAboutTab ? AppMenuTab.About : AppMenuTab.Help, viewModel: null, onSelectTheme: onSelectTheme)
+    {
     }
 
     protected override void OnAppearing()
     {
         base.OnAppearing();
         AppThemeManager.ThemeChanged += OnThemeChanged;
+        if (_selectedTab == AppMenuTab.Settings)
+        {
+            _tabContentContainer.Content = BuildSettingsTabView();
+        }
     }
 
     protected override void OnDisappearing()
@@ -82,8 +123,7 @@ public class HelpAboutModalPage : ContentPage
             RowDefinitions =
             {
                 new RowDefinition { Height = GridLength.Auto }, // Top Title + Close bar
-                new RowDefinition { Height = GridLength.Auto }, // Tri-mode Appearance Switcher (System / Dark / Light)
-                new RowDefinition { Height = GridLength.Auto }, // Segmented Tab Switcher (Help vs About)
+                new RowDefinition { Height = GridLength.Auto }, // 3-Tab Switcher (Settings | Help | About)
                 new RowDefinition { Height = GridLength.Star }, // Scrollable Tab Content
                 new RowDefinition { Height = GridLength.Auto }  // Bottom Action Button
             },
@@ -123,11 +163,11 @@ public class HelpAboutModalPage : ContentPage
             Text = "🦉 Comp OWL — Olympic Weightlifting Warmup",
             TextColor = AppThemeManager.Color("#F8FAFC"),
             FontAttributes = FontAttributes.Bold,
-            FontSize = 15
+            FontSize = 14.5
         });
         titleStack.Add(new Label
         {
-            Text = "Competition & Training Warmup Timing Assistant",
+            Text = "Settings, Competition Guide & App Info",
             TextColor = AppThemeManager.Color("#38BDF8"),
             FontSize = 11.5
         });
@@ -153,90 +193,62 @@ public class HelpAboutModalPage : ContentPage
         headerGrid.Add(closeBtn, 1, 0);
         headerBorder.Content = headerGrid;
 
-        // 1b. Tri-mode Appearance Switcher (System / Dark / Light)
-        var themeBorder = new Border
-        {
-            BackgroundColor = AppThemeManager.Color("#1E293B"),
-            Stroke = AppThemeManager.Color("#334155"),
-            StrokeThickness = 1,
-            StrokeShape = new RoundRectangle { CornerRadius = 10 },
-            Padding = new Thickness(10, 8)
-        };
-
-        var themeGrid = new Grid
-        {
-            ColumnDefinitions =
-            {
-                new ColumnDefinition { Width = GridLength.Auto },
-                new ColumnDefinition { Width = GridLength.Star },
-                new ColumnDefinition { Width = GridLength.Star },
-                new ColumnDefinition { Width = GridLength.Star }
-            },
-            ColumnSpacing = 6,
-            VerticalOptions = LayoutOptions.Center
-        };
-
-        themeGrid.Add(new Label
-        {
-            Text = "THEME:",
-            TextColor = AppThemeManager.Color("#94A3B8"),
-            FontAttributes = FontAttributes.Bold,
-            FontSize = 11,
-            VerticalTextAlignment = TextAlignment.Center,
-            Margin = new Thickness(2, 0, 4, 0)
-        }, 0, 0);
-
-        string currentPref = AppThemeManager.CurrentPreference;
-        var sysThemeBtn = CreateThemeSegmentButton("🌓 System", ProfileStorageService.ThemeSystem, currentPref == ProfileStorageService.ThemeSystem);
-        var darkThemeBtn = CreateThemeSegmentButton("🌙 Dark", ProfileStorageService.ThemeDark, currentPref == ProfileStorageService.ThemeDark);
-        var lightThemeBtn = CreateThemeSegmentButton("☀️ Light", ProfileStorageService.ThemeLight, currentPref == ProfileStorageService.ThemeLight);
-
-        themeGrid.Add(sysThemeBtn, 1, 0);
-        themeGrid.Add(darkThemeBtn, 2, 0);
-        themeGrid.Add(lightThemeBtn, 3, 0);
-        themeBorder.Content = themeGrid;
-
-        // 2. Segmented Tab Bar (HOW TO USE vs ABOUT)
+        // 2. Segmented 3-Tab Bar (SETTINGS | HELP | ABOUT)
         var tabGrid = new Grid
         {
             ColumnDefinitions =
             {
                 new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Star },
                 new ColumnDefinition { Width = GridLength.Star }
             },
-            ColumnSpacing = 8
+            ColumnSpacing = 6
         };
+
+        _settingsTabBtn = new Button
+        {
+            Text = "⚙️ SETTINGS",
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 11.5,
+            CornerRadius = 8,
+            Padding = new Thickness(4, 0),
+            HeightRequest = 38
+        };
+        _settingsTabBtn.Clicked += (_, _) => SelectTab(AppMenuTab.Settings);
 
         _helpTabBtn = new Button
         {
-            Text = "📖 HOW TO USE (HELP)",
+            Text = "📖 HELP",
             FontAttributes = FontAttributes.Bold,
-            FontSize = 12,
+            FontSize = 11.5,
             CornerRadius = 8,
-            HeightRequest = 40
+            Padding = new Thickness(4, 0),
+            HeightRequest = 38
         };
-        _helpTabBtn.Clicked += (_, _) => SelectTab(aboutTab: false);
+        _helpTabBtn.Clicked += (_, _) => SelectTab(AppMenuTab.Help);
 
         _aboutTabBtn = new Button
         {
-            Text = "🦉 ABOUT COMP OWL",
+            Text = "🦉 ABOUT",
             FontAttributes = FontAttributes.Bold,
-            FontSize = 12,
+            FontSize = 11.5,
             CornerRadius = 8,
-            HeightRequest = 40
+            Padding = new Thickness(4, 0),
+            HeightRequest = 38
         };
-        _aboutTabBtn.Clicked += (_, _) => SelectTab(aboutTab: true);
+        _aboutTabBtn.Clicked += (_, _) => SelectTab(AppMenuTab.About);
 
-        tabGrid.Add(_helpTabBtn, 0, 0);
-        tabGrid.Add(_aboutTabBtn, 1, 0);
+        tabGrid.Add(_settingsTabBtn, 0, 0);
+        tabGrid.Add(_helpTabBtn, 1, 0);
+        tabGrid.Add(_aboutTabBtn, 2, 0);
 
         // 3. Tab Body Container
         _tabContentContainer = new ContentView();
 
-        // 4. Footer "Got It" Button
+        // 4. Footer "Done" Button
         var footerBtn = new Button
         {
-            Text = "GOT IT — BACK TO WARMUP",
+            Text = "DONE — BACK TO WARMUP",
             BackgroundColor = Color.FromArgb("#0284C7"),
             BorderColor = AppThemeManager.Color("#38BDF8"),
             BorderWidth = 1,
@@ -249,13 +261,12 @@ public class HelpAboutModalPage : ContentPage
         footerBtn.Clicked += OnCloseClicked;
 
         outerGrid.Add(headerBorder, 0, 0);
-        outerGrid.Add(themeBorder, 0, 1);
-        outerGrid.Add(tabGrid, 0, 2);
-        outerGrid.Add(_tabContentContainer, 0, 3);
-        outerGrid.Add(footerBtn, 0, 4);
+        outerGrid.Add(tabGrid, 0, 1);
+        outerGrid.Add(_tabContentContainer, 0, 2);
+        outerGrid.Add(footerBtn, 0, 3);
 
         Content = outerGrid;
-        SelectTab(_isAboutTabSelected);
+        SelectTab(_selectedTab);
     }
 
     private Button CreateThemeSegmentButton(string title, string preferenceValue, bool isSelected)
@@ -270,23 +281,27 @@ public class HelpAboutModalPage : ContentPage
             FontAttributes = FontAttributes.Bold,
             FontSize = 11.5,
             CornerRadius = 7,
-            HeightRequest = 32,
+            HeightRequest = 36,
             Padding = new Thickness(4, 0)
         };
         btn.Clicked += (_, _) => ApplySelectedTheme(preferenceValue);
         return btn;
     }
 
-    private void SelectTab(bool aboutTab)
+    private void SelectTab(AppMenuTab tab)
     {
-        _isAboutTabSelected = aboutTab;
+        _selectedTab = tab;
 
-        StyleTabButton(_helpTabBtn, isActive: !aboutTab);
-        StyleTabButton(_aboutTabBtn, isActive: aboutTab);
+        StyleTabButton(_settingsTabBtn, isActive: tab == AppMenuTab.Settings);
+        StyleTabButton(_helpTabBtn, isActive: tab == AppMenuTab.Help);
+        StyleTabButton(_aboutTabBtn, isActive: tab == AppMenuTab.About);
 
-        _tabContentContainer.Content = aboutTab
-            ? BuildAboutTabView()
-            : BuildHelpTabView();
+        _tabContentContainer.Content = tab switch
+        {
+            AppMenuTab.Settings => BuildSettingsTabView(),
+            AppMenuTab.About => BuildAboutTabView(),
+            _ => BuildHelpTabView()
+        };
     }
 
     private static void StyleTabButton(Button btn, bool isActive)
@@ -295,6 +310,592 @@ public class HelpAboutModalPage : ContentPage
         btn.BorderColor = isActive ? AppThemeManager.Color("#38BDF8") : AppThemeManager.Color("#334155");
         btn.BorderWidth = isActive ? 1.5 : 1;
         btn.TextColor = isActive ? Colors.White : AppThemeManager.Color("#94A3B8");
+    }
+
+    // =========================================================================
+    // SETTINGS TAB
+    // =========================================================================
+    private View BuildSettingsTabView()
+    {
+        var stack = new VerticalStackLayout
+        {
+            Spacing = 12,
+            Padding = new Thickness(0, 0, 0, 10)
+        };
+
+        // 1. Appearance Theme Card
+        var themeCard = CreateSettingsCard("APPEARANCE THEME", "Choose System (Auto), Dark, or Light mode for Comp OWL.");
+        var themeGrid = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Star }
+            },
+            ColumnSpacing = 8
+        };
+        string currentPref = AppThemeManager.CurrentPreference;
+        themeGrid.Add(CreateThemeSegmentButton("🌓 System", ProfileStorageService.ThemeSystem, currentPref == ProfileStorageService.ThemeSystem), 0, 0);
+        themeGrid.Add(CreateThemeSegmentButton("🌙 Dark", ProfileStorageService.ThemeDark, currentPref == ProfileStorageService.ThemeDark), 1, 0);
+        themeGrid.Add(CreateThemeSegmentButton("☀️ Light", ProfileStorageService.ThemeLight, currentPref == ProfileStorageService.ThemeLight), 2, 0);
+        ((VerticalStackLayout)themeCard.Content!).Add(themeGrid);
+        stack.Add(themeCard);
+
+        // 2. Audio & Live Alerts Card
+        if (_viewModel != null)
+        {
+            var audioCard = CreateSettingsCard("AUDIO & COMPETITION ALERTS", "Alerts during Live warmup progression.");
+            var audioStack = (VerticalStackLayout)audioCard.Content!;
+
+            var beepRow = new Grid
+            {
+                ColumnDefinitions =
+                {
+                    new ColumnDefinition { Width = GridLength.Star },
+                    new ColumnDefinition { Width = GridLength.Auto }
+                },
+                ColumnSpacing = 8
+            };
+            beepRow.Add(new VerticalStackLayout
+            {
+                Spacing = 1,
+                VerticalOptions = LayoutOptions.Center,
+                Children =
+                {
+                    new Label
+                    {
+                        Text = "🔔 Beep & Haptic on Next Step",
+                        TextColor = AppThemeManager.Color("#F8FAFC"),
+                        FontAttributes = FontAttributes.Bold,
+                        FontSize = 13
+                    },
+                    new Label
+                    {
+                        Text = "Also toggleable anytime from the top header bar",
+                        TextColor = AppThemeManager.Color("#94A3B8"),
+                        FontSize = 11
+                    }
+                }
+            }, 0, 0);
+
+            var beepSwitch = new Switch
+            {
+                IsToggled = _viewModel.BeepOnNextLift,
+                OnColor = Color.FromArgb("#22C55E"),
+                ThumbColor = Colors.White,
+                VerticalOptions = LayoutOptions.Center
+            };
+            beepSwitch.Toggled += (_, e) =>
+            {
+                if (_viewModel.BeepOnNextLift != e.Value)
+                {
+                    _viewModel.BeepOnNextLift = e.Value;
+                }
+            };
+            beepRow.Add(beepSwitch, 1, 0);
+            audioStack.Add(beepRow);
+            stack.Add(audioCard);
+        }
+
+        // 3. AI Scoreboard Scanner (Beta) — Gemini API Key & Preferences
+        stack.Add(BuildGeminiSettingsCard());
+
+        // 4. Android Floating Mini-Timer Overlay Permission Status
+#if ANDROID
+        var overlayCard = CreateSettingsCard("FLOATING MINI-TIMER (ANDROID)", "Keep a draggable countdown pill on screen when switching apps during Live mode.");
+        var overlayStack = (VerticalStackLayout)overlayCard.Content!;
+        bool overlayGranted = DevicePlatformService.CanDrawAndroidOverlays();
+
+        var statusRow = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Auto }
+            },
+            ColumnSpacing = 8
+        };
+        statusRow.Add(new Label
+        {
+            Text = overlayGranted
+                ? "✅ 'Appear on top' permission is enabled"
+                : "⚠️ 'Appear on top' permission is not enabled",
+            TextColor = overlayGranted ? AppThemeManager.Color("#4ADE80") : AppThemeManager.Color("#FBBF24"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 12,
+            VerticalTextAlignment = TextAlignment.Center
+        }, 0, 0);
+
+        var openOverlayBtn = new Button
+        {
+            Text = overlayGranted ? "Manage" : "Enable...",
+            BackgroundColor = overlayGranted ? AppThemeManager.Color("#0F172A") : Color.FromArgb("#0284C7"),
+            BorderColor = AppThemeManager.Color("#38BDF8"),
+            BorderWidth = 1,
+            TextColor = overlayGranted ? AppThemeManager.Color("#38BDF8") : Colors.White,
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 11.5,
+            CornerRadius = 6,
+            HeightRequest = 32,
+            Padding = new Thickness(12, 0)
+        };
+        openOverlayBtn.Clicked += (_, _) => DevicePlatformService.OpenAndroidOverlaySettings();
+        statusRow.Add(openOverlayBtn, 1, 0);
+        overlayStack.Add(statusRow);
+        stack.Add(overlayCard);
+#endif
+
+        // 5. Data, Backups & Reset Card
+        if (_onExportBackup != null || _onImportBackup != null || _onResetAllSettings != null)
+        {
+            var dataCard = CreateSettingsCard("DATA & BACKUPS", "Export or restore all saved lifter profiles and settings (.json). Your Gemini API key is never included in backups.");
+            var dataStack = (VerticalStackLayout)dataCard.Content!;
+
+            var backupRow = new Grid
+            {
+                ColumnDefinitions =
+                {
+                    new ColumnDefinition { Width = GridLength.Star },
+                    new ColumnDefinition { Width = GridLength.Star }
+                },
+                ColumnSpacing = 8
+            };
+
+            if (_onExportBackup != null)
+            {
+                var exportBtn = new Button
+                {
+                    Text = "📤 Export Backup",
+                    BackgroundColor = AppThemeManager.Color("#0F172A"),
+                    BorderColor = AppThemeManager.Color("#38BDF8"),
+                    BorderWidth = 1,
+                    TextColor = AppThemeManager.Color("#38BDF8"),
+                    FontAttributes = FontAttributes.Bold,
+                    FontSize = 12,
+                    CornerRadius = 8,
+                    HeightRequest = 38
+                };
+                exportBtn.Clicked += async (_, _) => await _onExportBackup();
+                backupRow.Add(exportBtn, 0, 0);
+            }
+
+            if (_onImportBackup != null)
+            {
+                var importBtn = new Button
+                {
+                    Text = "📥 Import Backup",
+                    BackgroundColor = AppThemeManager.Color("#0F172A"),
+                    BorderColor = AppThemeManager.Color("#38BDF8"),
+                    BorderWidth = 1,
+                    TextColor = AppThemeManager.Color("#38BDF8"),
+                    FontAttributes = FontAttributes.Bold,
+                    FontSize = 12,
+                    CornerRadius = 8,
+                    HeightRequest = 38
+                };
+                importBtn.Clicked += async (_, _) => await _onImportBackup();
+                backupRow.Add(importBtn, 1, 0);
+            }
+
+            dataStack.Add(backupRow);
+
+            if (_onResetAllSettings != null)
+            {
+                var resetBtn = new Button
+                {
+                    Text = "⚠️ Clear All Settings (Reset to Demo Profile)",
+                    BackgroundColor = AppThemeManager.Color("#450A0A"),
+                    BorderColor = Color.FromArgb("#DC2626"),
+                    BorderWidth = 1,
+                    TextColor = AppThemeManager.Color("#FCA5A5"),
+                    FontAttributes = FontAttributes.Bold,
+                    FontSize = 12,
+                    CornerRadius = 8,
+                    HeightRequest = 38,
+                    Margin = new Thickness(0, 2, 0, 0)
+                };
+                resetBtn.Clicked += async (_, _) => await _onResetAllSettings();
+                dataStack.Add(resetBtn);
+            }
+
+            stack.Add(dataCard);
+        }
+
+        return new ScrollView { Content = stack };
+    }
+
+    private Border BuildGeminiSettingsCard()
+    {
+        bool hasKey = _visionService.HasApiKey();
+        var card = CreateSettingsCard(
+            "AI SCOREBOARD SCANNER (BETA)",
+            "Encrypted on-device Google Gemini API key (Android Keystore / iOS Keychain) — never exported or backed up.");
+        var stack = (VerticalStackLayout)card.Content!;
+
+        // Key Status + Instructions Toggle Row
+        var statusRow = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Auto }
+            },
+            ColumnSpacing = 8
+        };
+
+        var keyStatusHeaderLbl = new Label
+        {
+            Text = hasKey ? $"🔑 Key Ready ({_visionService.GetMaskedApiKey()})" : "⚠️ No Gemini API Key Configured",
+            TextColor = hasKey ? AppThemeManager.Color("#4ADE80") : AppThemeManager.Color("#FBBF24"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 12.5,
+            VerticalTextAlignment = TextAlignment.Center
+        };
+        statusRow.Add(keyStatusHeaderLbl, 0, 0);
+
+        var instructionsBorder = new Border
+        {
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            Stroke = AppThemeManager.Color("#1E3A8A"),
+            StrokeThickness = 1,
+            StrokeShape = new RoundRectangle { CornerRadius = 8 },
+            Padding = new Thickness(10, 8),
+            IsVisible = _isApiInstructionsExpanded
+        };
+
+        var toggleGuideBtn = new Button
+        {
+            Text = _isApiInstructionsExpanded ? "▲ Hide Guide" : "📖 How to Get Key",
+            BackgroundColor = AppThemeManager.Color("#0F172A"),
+            BorderColor = AppThemeManager.Color("#334155"),
+            BorderWidth = 1,
+            TextColor = AppThemeManager.Color("#38BDF8"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 11,
+            CornerRadius = 6,
+            HeightRequest = 30,
+            Padding = new Thickness(8, 0)
+        };
+        toggleGuideBtn.Clicked += (_, _) =>
+        {
+            _isApiInstructionsExpanded = !_isApiInstructionsExpanded;
+            instructionsBorder.IsVisible = _isApiInstructionsExpanded;
+            toggleGuideBtn.Text = _isApiInstructionsExpanded ? "▲ Hide Guide" : "📖 How to Get Key";
+        };
+        statusRow.Add(toggleGuideBtn, 1, 0);
+        stack.Add(statusRow);
+
+        var instStack = new VerticalStackLayout { Spacing = 5 };
+        instStack.Add(new Label
+        {
+            Text = "GET A FREE GOOGLE GEMINI API KEY (30 SECONDS):",
+            FontSize = 11,
+            FontAttributes = FontAttributes.Bold,
+            TextColor = AppThemeManager.Color("#38BDF8")
+        });
+        instStack.Add(new Label
+        {
+            Text = "1. Tap '🌐 Get Free Key at Google AI Studio' below and sign in with your Google account.\n" +
+                   "2. Tap 'Create API key' and copy the key (starts with AIza...).\n" +
+                   "3. Paste it below, tap '💾 Save', and optionally tap '✓ Test' to verify.",
+            FontSize = 11.5,
+            LineHeight = 1.2,
+            TextColor = AppThemeManager.Color("#CBD5E1")
+        });
+        var openStudioBtn = new Button
+        {
+            Text = "🌐 Get Free Key at Google AI Studio",
+            BackgroundColor = Color.FromArgb("#0284C7"),
+            TextColor = Colors.White,
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 11.5,
+            CornerRadius = 6,
+            HeightRequest = 34,
+            Margin = new Thickness(0, 3, 0, 0)
+        };
+        openStudioBtn.Clicked += async (_, _) =>
+        {
+            try
+            {
+                await Launcher.Default.OpenAsync(new Uri(GeminiScoreboardVisionService.GoogleAiStudioKeyUrl));
+            }
+            catch (Exception ex)
+            {
+                await DisplayAlertAsync("Browser Error", $"Visit {GeminiScoreboardVisionService.GoogleAiStudioKeyUrl}\n({ex.Message})", "OK");
+            }
+        };
+        instStack.Add(openStudioBtn);
+        instructionsBorder.Content = instStack;
+        stack.Add(instructionsBorder);
+
+        var keyEntry = new Entry
+        {
+            Placeholder = "Paste Gemini API Key (AIza...)",
+            PlaceholderColor = AppThemeManager.Color("#64748B"),
+            Text = _visionService.GetApiKey(),
+            IsPassword = true,
+            FontSize = 13,
+            TextColor = AppThemeManager.Color("#F8FAFC"),
+            BackgroundColor = AppThemeManager.EntryBackground,
+            HeightRequest = 40
+        };
+        stack.Add(keyEntry);
+
+        var btnGrid = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition { Width = GridLength.Star },
+                new ColumnDefinition { Width = GridLength.Auto },
+                new ColumnDefinition { Width = GridLength.Auto },
+                new ColumnDefinition { Width = GridLength.Auto }
+            },
+            ColumnSpacing = 6
+        };
+
+        var statusBannerLabel = new Label
+        {
+            Text = _apiKeyStatusText,
+            FontSize = 11.5,
+            TextColor = AppThemeManager.Color(_apiKeyStatusIsError ? "#FCA5A5" : "#86EFAC")
+        };
+
+        var statusBannerBorder = new Border
+        {
+            BackgroundColor = AppThemeManager.Color(_apiKeyStatusIsError ? "#450A0A" : "#0F291E"),
+            Stroke = Color.FromArgb(_apiKeyStatusIsError ? "#DC2626" : "#16A34A"),
+            StrokeThickness = 1,
+            StrokeShape = new RoundRectangle { CornerRadius = 6 },
+            Padding = new Thickness(8, 6),
+            IsVisible = !string.IsNullOrWhiteSpace(_apiKeyStatusText),
+            Content = statusBannerLabel
+        };
+
+        void UpdateKeyStatusInPlace()
+        {
+            bool keyPresent = _visionService.HasApiKey();
+            keyStatusHeaderLbl.Text = keyPresent
+                ? $"🔑 Key Ready ({_visionService.GetMaskedApiKey()})"
+                : "⚠️ No Gemini API Key Configured";
+            keyStatusHeaderLbl.TextColor = keyPresent
+                ? AppThemeManager.Color("#4ADE80")
+                : AppThemeManager.Color("#FBBF24");
+
+            instructionsBorder.IsVisible = _isApiInstructionsExpanded;
+            toggleGuideBtn.Text = _isApiInstructionsExpanded ? "▲ Hide Guide" : "📖 How to Get Key";
+
+            statusBannerBorder.IsVisible = !string.IsNullOrWhiteSpace(_apiKeyStatusText);
+            statusBannerBorder.BackgroundColor = AppThemeManager.Color(_apiKeyStatusIsError ? "#450A0A" : "#0F291E");
+            statusBannerBorder.Stroke = Color.FromArgb(_apiKeyStatusIsError ? "#DC2626" : "#16A34A");
+            statusBannerLabel.Text = _apiKeyStatusText;
+            statusBannerLabel.TextColor = AppThemeManager.Color(_apiKeyStatusIsError ? "#FCA5A5" : "#86EFAC");
+        }
+
+        var saveKeyBtn = new Button
+        {
+            Text = "💾 Save",
+            BackgroundColor = Color.FromArgb("#16A34A"),
+            TextColor = Colors.White,
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 12,
+            CornerRadius = 6,
+            HeightRequest = 36,
+            Padding = new Thickness(8, 0)
+        };
+        saveKeyBtn.Clicked += (_, _) =>
+        {
+            string entered = keyEntry.Text?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(entered))
+            {
+                _apiKeyStatusText = "Please paste a valid Gemini API key before saving.";
+                _apiKeyStatusIsError = true;
+            }
+            else
+            {
+                _visionService.SaveApiKey(entered);
+                _isApiInstructionsExpanded = false;
+                _apiKeyStatusText = "Saved encrypted Gemini API key on this device.";
+                _apiKeyStatusIsError = false;
+            }
+            UpdateKeyStatusInPlace();
+        };
+
+        var testKeyBtn = new Button
+        {
+            Text = _isTestingApiKey ? "Testing..." : "✓ Test",
+            BackgroundColor = Color.FromArgb("#0284C7"),
+            TextColor = Colors.White,
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 11.5,
+            CornerRadius = 6,
+            HeightRequest = 36,
+            Padding = new Thickness(10, 0),
+            IsEnabled = !_isTestingApiKey
+        };
+        testKeyBtn.Clicked += async (_, _) =>
+        {
+            string candidate = keyEntry.Text?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                _apiKeyStatusText = "Paste or save a Gemini API key to test.";
+                _apiKeyStatusIsError = true;
+                UpdateKeyStatusInPlace();
+                return;
+            }
+
+            _isTestingApiKey = true;
+            testKeyBtn.IsEnabled = false;
+            testKeyBtn.Text = "Testing...";
+            _apiKeyStatusText = "Checking key against Google Gemini API...";
+            _apiKeyStatusIsError = false;
+            UpdateKeyStatusInPlace();
+
+            var (ok, msg) = await _visionService.TestApiKeyAsync(candidate);
+            _isTestingApiKey = false;
+            testKeyBtn.IsEnabled = true;
+            testKeyBtn.Text = "✓ Test";
+            _apiKeyStatusText = msg;
+            _apiKeyStatusIsError = !ok;
+            UpdateKeyStatusInPlace();
+        };
+
+        var showHideBtn = new Button
+        {
+            Text = "👁",
+            BackgroundColor = AppThemeManager.NeutralButtonBackground,
+            TextColor = AppThemeManager.NeutralButtonText,
+            FontSize = 13,
+            CornerRadius = 6,
+            WidthRequest = 38,
+            HeightRequest = 36,
+            Padding = Thickness.Zero
+        };
+        showHideBtn.Clicked += (_, _) =>
+        {
+            keyEntry.IsPassword = !keyEntry.IsPassword;
+            showHideBtn.Text = keyEntry.IsPassword ? "👁" : "🙈";
+        };
+
+        var clearKeyBtn = new Button
+        {
+            Text = "🗑",
+            BackgroundColor = Color.FromArgb("#DC2626"),
+            TextColor = Colors.White,
+            FontSize = 13,
+            CornerRadius = 6,
+            WidthRequest = 38,
+            HeightRequest = 36,
+            Padding = Thickness.Zero
+        };
+        clearKeyBtn.Clicked += (_, _) =>
+        {
+            _visionService.SaveApiKey(string.Empty);
+            keyEntry.Text = string.Empty;
+            _isApiInstructionsExpanded = true;
+            _apiKeyStatusText = "Cleared saved Gemini API key from this device.";
+            _apiKeyStatusIsError = false;
+            UpdateKeyStatusInPlace();
+        };
+
+        btnGrid.Add(saveKeyBtn, 0, 0);
+        btnGrid.Add(testKeyBtn, 1, 0);
+        btnGrid.Add(showHideBtn, 2, 0);
+        btnGrid.Add(clearKeyBtn, 3, 0);
+        stack.Add(btnGrid);
+        stack.Add(statusBannerBorder);
+
+        if (_viewModel != null)
+        {
+            stack.Add(new BoxView
+            {
+                HeightRequest = 1,
+                Color = AppThemeManager.Color("#334155"),
+                Margin = new Thickness(0, 4, 0, 2)
+            });
+
+            var autoOneRow = new Grid
+            {
+                ColumnDefinitions =
+                {
+                    new ColumnDefinition { Width = GridLength.Star },
+                    new ColumnDefinition { Width = GridLength.Auto }
+                },
+                ColumnSpacing = 8
+            };
+            autoOneRow.Add(new VerticalStackLayout
+            {
+                Spacing = 1,
+                VerticalOptions = LayoutOptions.Center,
+                Children =
+                {
+                    new Label
+                    {
+                        Text = "Replace auto +1 kg board placeholders",
+                        TextColor = AppThemeManager.Color("#F8FAFC"),
+                        FontAttributes = FontAttributes.Bold,
+                        FontSize = 12.5
+                    },
+                    new Label
+                    {
+                        Text = "Scoreboards auto-fill +1 kg after a make until the coach declares the real jump",
+                        TextColor = AppThemeManager.Color("#94A3B8"),
+                        FontSize = 10.5
+                    }
+                }
+            }, 0, 0);
+
+            var autoOneSwitch = new Switch
+            {
+                IsToggled = _viewModel.ReplaceAutoOneKgAfterMake,
+                OnColor = Color.FromArgb("#0284C7"),
+                ThumbColor = Colors.White,
+                VerticalOptions = LayoutOptions.Center
+            };
+            autoOneSwitch.Toggled += (_, e) =>
+            {
+                if (_viewModel.ReplaceAutoOneKgAfterMake != e.Value)
+                {
+                    _viewModel.ReplaceAutoOneKgAfterMake = e.Value;
+                }
+            };
+            autoOneRow.Add(autoOneSwitch, 1, 0);
+            stack.Add(autoOneRow);
+        }
+
+        return card;
+    }
+
+    private static Border CreateSettingsCard(string badgeTitle, string subtitle)
+    {
+        var stack = new VerticalStackLayout { Spacing = 8 };
+        stack.Add(new Label
+        {
+            Text = badgeTitle,
+            TextColor = AppThemeManager.Color("#38BDF8"),
+            FontAttributes = FontAttributes.Bold,
+            FontSize = 11
+        });
+        if (!string.IsNullOrWhiteSpace(subtitle))
+        {
+            stack.Add(new Label
+            {
+                Text = subtitle,
+                TextColor = AppThemeManager.Color("#94A3B8"),
+                FontSize = 11.5,
+                LineHeight = 1.15
+            });
+        }
+
+        return new Border
+        {
+            BackgroundColor = AppThemeManager.Color("#1E293B"),
+            Stroke = AppThemeManager.Color("#334155"),
+            StrokeThickness = 1,
+            StrokeShape = new RoundRectangle { CornerRadius = 10 },
+            Padding = new Thickness(14, 12),
+            Content = stack
+        };
     }
 
     private View BuildHelpTabView()
@@ -326,10 +927,10 @@ public class HelpAboutModalPage : ContentPage
             accentColorHex: "#38BDF8",
             bullets: new[]
             {
-                "Snap or Pick a Scoreboard Photo: Tap '📷 Scan Scoreboard (Beta)' in Setup or '📷 Scan (Beta)' in Live mode to photograph the warmup room monitor or pick a photo from your gallery.",
-                "Private On-Device Gemini API Key: Uses your own free Google AI Studio (Gemini Flash) API key. Your key is stored strictly on your device only (gemini_api_key.txt) and is never included in profile backups.",
-                "Exact IWF Calling-Order Rules: Calculates Lifts Out to your Opener using official rising-bar priority: (1) Lowest Weight → (2) Earlier Attempt # (1st attempt beats 2nd/3rd at the same weight regardless of Lot #) → (3) Earlier Previous Attempt Sequence (replayed retroactively from Lift #1) → (4) Lower Lot/Seed # for 1st-attempt ties.",
-                "S-Curve Next-Attempt Projections: Undeclared 2nd & 3rd attempts are projected in whole kilograms using a logistic S-curve (+1kg around 20kg, +2kg around 40kg, +3kg around 65kg, +4kg around 90kg, capped at +5kg at 105kg+, with a slight step-down on 3rd attempts when the 1st jump > 3kg, and +0kg repeat after a miss).",
+                "Snap or Pick a Scoreboard Photo: Tap '📷 Scan Scoreboard (Beta)' in Setup or '📷 Scan (Beta)' in Live mode to photograph the warmup room monitor or pick a photo from your gallery. Photos are automatically oriented and compressed for fast uploads.",
+                "Private Encrypted Gemini API Key: Configure and test your free Google AI Studio key anytime in ⚙️ Settings (☰). Your key is encrypted in device SecureStorage (Android Keystore / iOS Keychain) and is never exported or backed up.",
+                "Exact IWF Calling-Order & 2-Min Self-Follow Detection: Calculates Lifts Out using official rising-bar priority (Lowest Weight → Earlier Attempt # → Earlier Previous Attempt Sequence → Lower Lot #) and automatically flags consecutive self-follow 2-minute clocks.",
+                "S-Curve Next-Attempt Projections: Undeclared 2nd & 3rd attempts are projected in whole kilograms using a logistic S-curve (+1kg around 20kg, +2kg around 40kg, +3kg around 65kg, +4kg around 90kg, capped at +5kg at 105kg+, and +0kg repeat after a miss).",
                 "Show Your Work, Row Exclusion & Overrides: Inspect every athlete's expected lifts and chronological call order, exclude prior-session lifter rows ('🚫 Exclude'), tap any cell to override a weight or status, or tap '✉️ Report Analysis Error' at the bottom to email a diagnostic report."
             }));
 
@@ -340,9 +941,10 @@ public class HelpAboutModalPage : ContentPage
             accentColorHex: "#FBBF24",
             bullets: new[]
             {
-                "2-Minute Clock (Following Yourself): If a lifter on stage follows themselves and gets a 2-minute timer instead of 1 minute, tap '+' on Lifts Out to add 1 extra lift (~1 min) to your countdown. For spread-out sessions where everyone follows themselves, increase 'Stage lift time (sec)' in Setup (e.g., to 95–115s).",
-                "Marshaling Board Changes: When lifters ahead of you change openers or pass, tap '-' or '+' on Lifts Out (or tap the number to type directly). Your warmup schedule recalculates immediately.",
-                "Stage Lifting Starts Early or Late: Tap '⚡ Start Comp Now' (pre-Snatch), '⏭️ ADVANCE TO STAGE LIFTING' (when introductions/break finish early), or tap/drag directly on any clock progress bar to scrub the timer.",
+                "2-Minute Clock (Following Yourself): Tap the dedicated '+1m' button in Live mode to add 60 seconds to the current stage lift only (without altering Lifts Out). It automatically resets to normal stage lift duration on the next attempt.",
+                "Accidental Advance or Edit: Tap '↩️ Undo' in Live mode to revert your last stage advance, Lifts Out edit, +1m extension, or progress bar scrub.",
+                "Marshaling Board Changes & Live Opener Tweaks: Adjust Lifts Out (- / + or tap to type), or tap your Opener weight chip directly in Live mode to change your opener on the fly without stopping the timer.",
+                "Stage Lifting Starts Early or Late: Tap '⚡ Start Comp Now' (pre-Snatch), 'ADVANCE TO STAGE LIFTING' (when introductions/break finish early), or tap/drag directly on any clock progress bar to scrub the timer.",
                 "Solo Training & Mock Meets: Turn on 'Auto-Advance (Training)' at the bottom of Live mode so Lifts Out ticks down automatically each time the stage clock hits 0s — ideal for hands-free training or practice meets."
             }));
 
@@ -372,7 +974,7 @@ public class HelpAboutModalPage : ContentPage
             {
                 "Warmup Extras (Pre-Barbell Prep): Add mobility or prep steps before your first barbell set (e.g., Foam Roll, Mobility, Shoes/Knee Sleeves) with custom durations in seconds. Tap any step's name or time to edit, reorder with ▲ / ▼, or delete with ✕.",
                 "Weight Jumps Table: Set how many kilos to jump from each weight threshold (e.g., +20 kg from 1 kg, +10 kg from 40 kg, +5 kg from 70 kg). Tap any rule to edit its threshold or jump size.",
-                "Automatic Final-3-Jump Smoothing: Comp OWL automatically smooths your final 3 warmup jumps so you never take a larger jump right before your opener than earlier in your warmup.",
+                "Automatic Final-Jump Midpoint Smoothing: Comp OWL automatically evens out awkward tiny jumps right before your opener so your final two warmup transitions stay balanced.",
                 "Warmup Rest / Interval Times: Set the duration per warmup set from each weight threshold (e.g., 2m00s light, 2m30s heavy). Tap any existing rule to edit its weight or time.",
                 "Calculated Warmup Schedule Table: Live preview in Setup showing every warmup step (#, Step name, Weight, IWF sleeve plate graphic, Duration, Total elapsed time, and '-XmYs before opener' reverse timestamp)."
             }));
@@ -410,10 +1012,9 @@ public class HelpAboutModalPage : ContentPage
             accentColorHex: "#38BDF8",
             bullets: new[]
             {
-                "Lifter Profiles ('👤'): Tap the top-left profile button to switch lifters, create a new profile, duplicate, rename, delete, or reset to demo defaults. Every change saves automatically to the active profile.",
-                "Barbell Weight ('🏋️ 20kg / 15kg'): Tap the bar button in the top bar to toggle between a 20 kg (Men's) and 15 kg (Women's) barbell. All warmup steps and IWF plate diagrams update immediately.",
-                "Export & Import Backups (.json): Save all lifter profiles to a .json backup file (e.g., to Google Drive or Files) or restore from a backup anytime via the '👤' Profile menu.",
-                "Appearance Theme ('🌓 Auto / 🌙 Dark / ☀️ Light'): Switch between System (Auto), Dark, and Light themes from the top header bar or the Appearance bar in Help & About."
+                "Lifter Profiles ('👤'): Tap the top-left profile button to switch lifters, create a new profile, duplicate, rename, or delete. Every change saves automatically and atomically to the active profile.",
+                "Barbell Weight ('🏋️ 20kg / 15kg'): Tap the bar button in the top bar to enter a 20 kg (Men's), 15 kg (Women's), or 10 kg (Youth) barbell. All warmup steps and IWF plate diagrams update immediately.",
+                "Settings, Theme & Backups ('☰'): Tap the top-right '☰' menu button to switch Appearance Theme (System / Dark / Light), configure and test your Gemini API key, check Android Floating Timer permissions, or export/import JSON profile backups."
             }));
 
         return new ScrollView { Content = stack };

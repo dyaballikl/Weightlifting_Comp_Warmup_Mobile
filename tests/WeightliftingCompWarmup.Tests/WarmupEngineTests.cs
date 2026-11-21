@@ -1319,4 +1319,299 @@ public class WarmupEngineTests
         Assert.Equal(0, cjRes.RemainingSnatchLifts);
         Assert.Equal(3, cjRes.LiftsOut);
     }
+
+    [Fact]
+    public void ScoreboardJsonParser_PreservesPendingAttempt3HeavierThanBestKg_AndHonorsExplicitAttemptIndex()
+    {
+        string json = """
+        {
+          "lifters": [
+            {
+              "orderNumber": 1,
+              "leftColumnText": "7",
+              "lotNumber": 7,
+              "name": "JONES Alex",
+              "snatchBestKg": 104,
+              "snatch": [
+                { "attempt": 3, "weightKg": 108, "status": "pending" },
+                { "attempt": 1, "weightKg": 100, "status": "good" },
+                { "attempt": 2, "weightKg": 104, "status": "good" }
+              ],
+              "cleanAndJerk": [
+                { "attempt": 1, "weightKg": 130, "status": "pending" },
+                { "attempt": 2, "weightKg": null, "status": "empty" },
+                { "attempt": 3, "weightKg": null, "status": "empty" }
+              ]
+            }
+          ]
+        }
+        """;
+
+        var lifters = ScoreboardJsonParser.ParseLiftersJson(json);
+        Assert.Single(lifters);
+        var row = lifters[0];
+        Assert.Equal(100, row.Snatch1.WeightKg);
+        Assert.Equal(ScoreboardAttemptStatus.Good, row.Snatch1.Status);
+        Assert.Equal(104, row.Snatch2.WeightKg);
+        Assert.Equal(ScoreboardAttemptStatus.Good, row.Snatch2.Status);
+        // Critical regression check: upcoming 3rd attempt heavier than snatchBestKg must stay Pending (NOT Miss!)
+        Assert.Equal(108, row.Snatch3.WeightKg);
+        Assert.Equal(ScoreboardAttemptStatus.Pending, row.Snatch3.Status);
+    }
+
+    [Fact]
+    public void ScoreboardCalculator_SnatchWithPendingAttempt3AndVisibleCjOpeners_IsNotConcluded()
+    {
+        var lifters = new List<ScoreboardLifterRow>
+        {
+            new()
+            {
+                OrderNumber = 1, LotNumber = 1, LeftColumnText = "1", Name = "LIFTER A",
+                Snatch1 = new ScoreboardAttemptCell(90, ScoreboardAttemptStatus.Good),
+                Snatch2 = new ScoreboardAttemptCell(93, ScoreboardAttemptStatus.Good),
+                Snatch3 = new ScoreboardAttemptCell(96, ScoreboardAttemptStatus.Pending),
+                Cj1 = new ScoreboardAttemptCell(115, ScoreboardAttemptStatus.Pending)
+            },
+            new()
+            {
+                OrderNumber = 2, LotNumber = 2, LeftColumnText = "2", Name = "LIFTER B",
+                Snatch1 = new ScoreboardAttemptCell(91, ScoreboardAttemptStatus.Good),
+                Snatch2 = new ScoreboardAttemptCell(94, ScoreboardAttemptStatus.Miss),
+                Snatch3 = new ScoreboardAttemptCell(94, ScoreboardAttemptStatus.Pending),
+                Cj1 = new ScoreboardAttemptCell(118, ScoreboardAttemptStatus.Pending)
+            }
+        };
+
+        var snatchRes = ScoreboardCalculator.AnalyzeScoreboard(lifters, LiftType.Snatch, userLifterIndex: 0, setupOpenerWeightKg: 90);
+        Assert.False(snatchRes.IsDisciplineConcluded);
+        Assert.Equal(4, snatchRes.LiftsPassed);
+
+        var cjRes = ScoreboardCalculator.AnalyzeScoreboard(lifters, LiftType.CleanAndJerk, userLifterIndex: 1, setupOpenerWeightKg: 118);
+        Assert.Equal(2, cjRes.RemainingSnatchLifts);
+    }
+
+    [Fact]
+    public void ScoreboardCalculator_DetectsConsecutiveTwoMinuteSelfFollowClock()
+    {
+        var lifters = new List<ScoreboardLifterRow>
+        {
+            new()
+            {
+                OrderNumber = 1, LotNumber = 1, LeftColumnText = "1", Name = "SOLO LIFTER",
+                Snatch1 = new ScoreboardAttemptCell(70, ScoreboardAttemptStatus.Pending)
+            },
+            new()
+            {
+                OrderNumber = 2, LotNumber = 2, LeftColumnText = "2", Name = "USER LIFTER",
+                Snatch1 = new ScoreboardAttemptCell(95, ScoreboardAttemptStatus.Pending)
+            }
+        };
+
+        // SOLO LIFTER will take 70 (Att 1), ~73 (Att 2 - follows self!), ~76 (Att 3 - follows self!) before USER at 95 kg
+        var res = ScoreboardCalculator.AnalyzeScoreboard(lifters, LiftType.Snatch, userLifterIndex: 1, setupOpenerWeightKg: 95);
+        Assert.Equal(3, res.LiftsOut);
+        Assert.Equal(2, res.SelfFollowCountBeforeUser);
+        Assert.False(res.UpcomingCallsBeforeUser[0].IsSelfFollowTwoMinClock);
+        Assert.True(res.UpcomingCallsBeforeUser[1].IsSelfFollowTwoMinClock);
+        Assert.True(res.UpcomingCallsBeforeUser[2].IsSelfFollowTwoMinClock);
+        Assert.Contains("2-min clock", res.UpcomingCallsBeforeUser[1].SequenceReasonNote, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void WarmupCalculator_AccumulatesExtrasTotalLength_AndFlagsPresentationBufferStep()
+    {
+        var profile = Defaults.CreateDemoProfile();
+        profile.SnatchOpenerWeight = 95;
+        profile.SnatchLiftsOut = 8;
+        profile.SnatchSecondsBreak = 600;
+        profile.SnatchSecondsPresentationLift = 300;
+
+        var steps = WarmupCalculator.BuildSteps(LiftType.Snatch, profile);
+
+        // Verify Extras (excluding Order 0 Wait step) accumulate strictly increasing TotalLength (20m, 25m, 30m, 40m, 45m)
+        var extras = steps.Where(s => !s.IsLift && s.Order > 0).ToList();
+        Assert.Equal(5, extras.Count);
+        Assert.Equal(1200, extras[0].TotalLength);
+        Assert.Equal(1500, extras[1].TotalLength);
+        Assert.Equal(1800, extras[2].TotalLength);
+        Assert.Equal(2400, extras[3].TotalLength);
+        Assert.Equal(2700, extras[4].TotalLength);
+
+        // Verify exactly one Snatch warmup lift is flagged with the 5-minute presentation buffer
+        var bufferedSteps = steps.Where(s => s.HasPresentationBuffer).ToList();
+        Assert.Single(bufferedSteps);
+        Assert.Equal(300, bufferedSteps[0].PresentationBufferSeconds);
+    }
+
+    [Fact]
+    public void LiveWarmupSession_Undo_RestoresLiftsOutBonusAndStageElapsed()
+    {
+        var profile = Defaults.CreateDemoProfile();
+        profile.SnatchOpenerWeight = 95;
+        profile.SnatchLiftsOut = 10;
+        profile.SnatchSecondsBreak = 0; // Straight into stage lifting
+        profile.Start = DateTime.Today.AddHours(9);
+
+        var session = new LiveWarmupSession(LiftType.Snatch, profile) { IsRunning = true };
+        DateTime now = DateTime.Today.AddHours(10); // After comp start
+
+        var s0 = session.GetSnapshot(now);
+        Assert.False(s0.CanUndo);
+        int baseMax = session.BaseStageLiftMaximum;
+
+        // Add +1m (2-min clock) to current lift only
+        var sPlusOne = session.AddCurrentStageLiftBonusSeconds(60, now);
+        Assert.Equal(60, session.CurrentStageLiftBonusSeconds);
+        Assert.Equal(baseMax + 60, session.StageLiftMaximum);
+        Assert.True(session.CanUndo);
+        Assert.Equal("+1m", sPlusOne.NextUndoActionLabel);
+
+        // Advance stage lift -> bonus must reset to 0 for the next lift
+        var sAdv = session.AdvanceStageLift(now);
+        Assert.Equal(9, session.LiftsOut);
+        Assert.Equal(1, session.LiftsPassed);
+        Assert.Equal(0, session.CurrentStageLiftBonusSeconds);
+        Assert.Equal(baseMax, session.StageLiftMaximum);
+        Assert.Equal("Advance", sAdv.NextUndoActionLabel);
+
+        // Undo Advance -> restores LiftsOut=10, LiftsPassed=0, and Bonus=60s
+        var sUndo1 = session.Undo(now);
+        Assert.Equal("Advance", session.LastUndoneActionLabel);
+        Assert.Equal("+1m", sUndo1.NextUndoActionLabel);
+        Assert.Equal(10, session.LiftsOut);
+        Assert.Equal(0, session.LiftsPassed);
+        Assert.Equal(60, session.CurrentStageLiftBonusSeconds);
+
+        // Undo +1m -> restores Bonus=0s
+        session.Undo(now);
+        Assert.Equal("+1m", session.LastUndoneActionLabel);
+        Assert.Equal(0, session.CurrentStageLiftBonusSeconds);
+        Assert.False(session.CanUndo);
+
+        // Regression: hitting the 300s (+5m) cap must NOT add extra no-op steps to the undo trail
+        for (int i = 0; i < 8; i++)
+        {
+            session.AddCurrentStageLiftBonusSeconds(60, now);
+        }
+        Assert.Equal(300, session.CurrentStageLiftBonusSeconds);
+        Assert.Equal(5, session.UndoHistoryCount); // Exactly 5 steps (60, 120, 180, 240, 300), NOT 8!
+
+        // Opener weight change in Live mode must be undoable too
+        var sOpener = session.UpdateOpenerWeight(92, now);
+        Assert.Equal(92, session.CurrentOpenerWeightKg);
+        Assert.Equal("Opener", sOpener.NextUndoActionLabel);
+        Assert.Equal(92, sOpener.Steps.Last().WeightKg);
+
+        var sUndoOpener = session.Undo(now);
+        Assert.Equal("Opener", session.LastUndoneActionLabel);
+        Assert.Equal(95, session.CurrentOpenerWeightKg);
+        Assert.Equal(95, sUndoOpener.Steps.Last().WeightKg);
+
+        // Also verify SummaryText places Collar (2.5) BEFORE fractional plates (< 2.5 kg)
+        var loadout91 = BarbellLoadCalculator.Calculate(91, 20, isOpener: true);
+        Assert.Equal("Per side: 25 + 5 + 2.5 + Collar (2.5) + 0.5", loadout91.SummaryText);
+    }
+
+    [Fact]
+    public void LiveWarmupSession_FinalTenSecondsFlag_AndNextStepPreviewText()
+    {
+        var profile = Defaults.CreateDemoProfile();
+        profile.SnatchOpenerWeight = 95;
+        profile.SnatchLiftsOut = 10;
+        profile.SnatchSecondsBreak = 0;
+        profile.Start = DateTime.Today.AddHours(9);
+
+        var session = new LiveWarmupSession(LiftType.Snatch, profile) { IsRunning = true };
+        DateTime now = DateTime.Today.AddHours(10);
+
+        var snap = session.ScrubStageLiftProgress(0.90, now); // ~5-6s left on a 55s clock
+        Assert.True(snap.IsStageFinalTenSeconds);
+        Assert.StartsWith("Next:", snap.NextStepPreviewText);
+    }
+
+    [Fact]
+    public void LiveWarmupSession_PersistedStateRoundTrip_DoesNotOverDeductPresentationClockBeforeCompStart()
+    {
+        var profile = Defaults.CreateDemoProfile();
+        profile.SnatchOpenerWeight = 95;
+        profile.SnatchLiftsOut = 10;
+        profile.SnatchSecondsBreak = 600; // 10m presentation & clock
+        profile.Start = DateTime.Today.AddHours(10);
+
+        DateTime savedLocal = DateTime.Today.AddHours(9).AddMinutes(58); // 2 min BEFORE comp start
+        DateTime savedUtc = savedLocal.ToUniversalTime();
+
+        var session = new LiveWarmupSession(LiftType.Snatch, profile) { IsRunning = true };
+        var persisted = session.ExportPersistedState(profile.Name, savedUtc);
+
+        // Restore 5 minutes later (10:03 local) -> only 3 minutes elapsed AFTER 10:00 comp start!
+        DateTime restoredLocal = DateTime.Today.AddHours(10).AddMinutes(3);
+        DateTime restoredUtc = savedUtc.AddMinutes(5);
+
+        var restored = new LiveWarmupSession(LiftType.Snatch, profile);
+        var restoredSnap = restored.RestorePersistedState(persisted, restoredLocal, restoredUtc);
+
+        // Compare against a control session ticking 1s at a time from 09:58:01 through 10:03:00
+        var control = new LiveWarmupSession(LiftType.Snatch, profile) { IsRunning = true };
+        for (int s = 1; s <= 300; s++)
+        {
+            control.Tick(savedLocal.AddSeconds(s));
+        }
+        var controlSnap = control.GetSnapshot(restoredLocal);
+
+        // Catch-up must match live 1s ticking identically (~419s left, NOT 300s over-deducted!)
+        Assert.Equal(controlSnap.CjBreakRemainingSeconds, restoredSnap.CjBreakRemainingSeconds);
+        Assert.InRange(restoredSnap.CjBreakRemainingSeconds, 419, 420);
+    }
+
+    [Fact]
+    public void ProfileStorageService_AtomicBackupRecovery_AndLiveSessionStatePersistence()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"CompOwlTest_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        string primaryPath = Path.Combine(tempDir, "profiles.json");
+        try
+        {
+            var svc1 = new ProfileStorageService(primaryPath);
+            svc1.Load();
+            var (ok, _, _) = svc1.AddNewProfile("Recovery Athlete");
+            Assert.True(ok);
+            svc1.SetReplaceAutoOneKgAfterMake(false);
+            svc1.Save(); // Ensures .bak has latest valid snapshot
+
+            // Corrupt primary profiles.json
+            File.WriteAllText(primaryPath, "{ invalid json !!!");
+
+            // New storage instance must transparently recover from profiles.json.bak
+            var svc2 = new ProfileStorageService(primaryPath);
+            svc2.Load();
+            Assert.Contains(svc2.Profiles, p => p.Name == "Recovery Athlete");
+            Assert.False(svc2.ReplaceAutoOneKgAfterMake);
+
+            // Live session persistence & 6h staleness expiration
+            DateTime nowUtc = new DateTime(2026, 11, 21, 10, 0, 0, DateTimeKind.Utc);
+            var liveState = new PersistedLiveSessionState
+            {
+                ProfileName = "Recovery Athlete",
+                LiftType = LiftType.Snatch,
+                IsRunning = true,
+                LiftsOut = 7,
+                LiftsPassed = 4,
+                SavedUtc = nowUtc
+            };
+            svc2.SaveLiveSessionState(liveState);
+
+            var freshLoaded = svc2.LoadLiveSessionState(nowUtc.AddMinutes(20));
+            Assert.NotNull(freshLoaded);
+            Assert.Equal(7, freshLoaded!.LiftsOut);
+            Assert.Equal(4, freshLoaded.LiftsPassed);
+
+            var staleLoaded = svc2.LoadLiveSessionState(nowUtc.AddHours(7));
+            Assert.Null(staleLoaded);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
 }

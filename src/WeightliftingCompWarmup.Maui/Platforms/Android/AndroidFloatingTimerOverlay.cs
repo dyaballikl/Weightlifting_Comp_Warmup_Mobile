@@ -636,9 +636,18 @@ public sealed class AndroidFloatingTimerOverlay
 
         try
         {
+            // Clamp drag coordinates within visible display bounds so the pill can never be lost off-screen
+            var metrics = AApplication.Context?.Resources?.DisplayMetrics;
+            int screenW = metrics?.WidthPixels ?? 1080;
+            int screenH = metrics?.HeightPixels ?? 1920;
+            int pillW = _rootPillView.Width > 0 ? _rootPillView.Width : DpToPx(PillWidthDp, _density);
+            int pillH = _rootPillView.Height > 0 ? _rootPillView.Height : DpToPx(96, _density);
+            int maxX = Math.Max(0, screenW - pillW);
+            int maxY = Math.Max(0, screenH - pillH);
+
             // Because Gravity is Bottom | End, X is distance from right edge and Y is distance from bottom edge
-            _layoutParams.X = Math.Max(0, startX - deltaRawX);
-            _layoutParams.Y = Math.Max(0, startY - deltaRawY);
+            _layoutParams.X = Math.Clamp(startX - deltaRawX, 0, maxX);
+            _layoutParams.Y = Math.Clamp(startY - deltaRawY, 0, maxY);
             _windowManager.UpdateViewLayout(_rootPillView, _layoutParams);
         }
         catch

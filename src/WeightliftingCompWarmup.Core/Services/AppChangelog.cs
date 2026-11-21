@@ -27,6 +27,16 @@ public static class AppChangelog
     private static readonly IReadOnlyList<AppReleaseNote> AllReleases =
     [
         new AppReleaseNote(
+            Version: "2.0.46",
+            Title: "Unified Settings Menu, Competition-Day Live Controls & Scanner Accuracy Fixes",
+            Changes:
+            [
+                "New Settings Tab & Cleaner Header: Consolidated Theme (System/Dark/Light), Audio Beep, Gemini API Key setup (with live Test Key check), AI Scanner defaults, Android Floating Timer permission status, and Backup Export/Import into a unified Settings / Help / About menu (☰), giving the Profile picker more breathing room.",
+                "Live Competition Upgrades: Added one-tap ↩️ Undo (with live action label & confirmation toast) for accidental stage advances/edits, a dedicated +1m (2-Min Clock) button for self-following lifters without distorting Lifts Out, inline Live Opener editing, final-10s urgency highlights, Up Next weight preview, a one-tap Start C&J Break banner after Snatch, auto-dismissing 10-second status toasts, and automatic Live timer recovery if Android clears memory during camera scans.",
+                "Schedule & Contrast Polish: Marks which Snatch lift carries the Presentation Buffer, fixes cumulative totals on Extras, improves yellow break bar contrast, and eliminates phone schedule column wrapping.",
+                "AI Scoreboard Scanner Accuracy, Speed & Security: Fixed pending 3rd attempts being falsely marked Miss, fixed premature Snatch conclusion when C&J openers are shown, added automatic 2-minute self-follow clock detection in Call Order, downscales & auto-orients photos before upload for 3–5x faster scans, fixed Light-mode contrast, and migrated the Gemini API key to encrypted device SecureStorage + x-goog-api-key headers."
+            ]),
+        new AppReleaseNote(
             Version: "2.0.45",
             Title: "AI Scoreboard Scanner (Beta) — Lifts Out, Passed & Call Order",
             Changes:

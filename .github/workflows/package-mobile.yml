@@ -6,8 +6,23 @@ on:
     branches: [ main, master ]
 
 jobs:
+  test:
+    name: Run Core Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run xUnit Test Suite
+        run: dotnet test tests/WeightliftingCompWarmup.Tests/WeightliftingCompWarmup.Tests.csproj -c Release
+
   package-android:
     name: Build Android APK
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +50,7 @@ jobs:
 
   package-ios:
     name: Build iOS IPA (macOS + Xcode)
+    needs: test
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,13 +75,14 @@ jobs:
 
       - name: Package .app into Sideloadable .ipa
         run: |
+          APP_VERSION=$(sed -n 's:.*<ApplicationDisplayVersion>\(.*\)</ApplicationDisplayVersion>.*:\1:p' src/WeightliftingCompWarmup.Maui/WeightliftingCompWarmup.Maui.csproj | tr -d '[:space:]')
           APP_PATH=$(find src/WeightliftingCompWarmup.Maui/bin/Release/net10.0-ios/ios-arm64 -name "*.app" -type d | head -n 1)
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
-          zip -r WeightliftingCompWarmup-2.0.4-unsigned.ipa Payload
+          zip -r "WeightliftingCompWarmup-${APP_VERSION}-unsigned.ipa" Payload
 
       - name: Upload iOS IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: WeightliftingCompWarmup-iOS-IPA
-          path: WeightliftingCompWarmup-2.0.4-unsigned.ipa
+          path: WeightliftingCompWarmup-*-unsigned.ipa
